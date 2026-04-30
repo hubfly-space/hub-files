@@ -11,10 +11,17 @@ import { api } from './api';
 function App() {
   const {
     path, files, loading, error, viewMode, setViewMode,
-    navigate, refresh, deleteItem, renameItem, createFolder
+    navigate, refresh, deleteItem, renameItem, createFolder,
+    zipItem, extractItem
   } = useFileSystem();
 
   const [openFile, setOpenFile] = useState<{ path: string, name: string } | null>(null);
+  const [search, setSearch] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+
+  const filteredFiles = files.filter(f => 
+    f.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -24,6 +31,20 @@ function App() {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    if (file) {
+      try {
+        await api.upload(path, file);
+        refresh();
+      } catch (err: any) {
+        alert(`Upload failed: ${err.message}`);
+      }
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
     if (file) {
       try {
         await api.upload(path, file);
@@ -71,7 +92,12 @@ function App() {
         </div>
       )}
       
-      <div className="content">
+      <div 
+        className={`content ${isDragging ? 'dragging' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+      >
         {openFile ? (
           <FileViewer 
             path={openFile.path} 
@@ -88,18 +114,29 @@ function App() {
             )}
 
             {!loading && !error && files.length > 0 && (
-              <div className={viewMode === 'list' ? 'file-list' : 'file-grid'}>
-                {files.map(file => (
-                  <FileItem 
-                    key={file.name}
-                    file={file}
-                    viewMode={viewMode}
-                    onNavigate={handleNavigate}
-                    onDelete={deleteItem}
-                    onRename={renameItem}
+              <>
+                <div className="search-bar">
+                  <input 
+                    placeholder="Search in folder..." 
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
                   />
-                ))}
-              </div>
+                </div>
+                <div className={viewMode === 'list' ? 'file-list' : 'file-grid'}>
+                  {filteredFiles.map(file => (
+                    <FileItem 
+                      key={file.name}
+                      file={file}
+                      viewMode={viewMode}
+                      onNavigate={handleNavigate}
+                      onDelete={deleteItem}
+                      onRename={renameItem}
+                      onZip={zipItem}
+                      onExtract={extractItem}
+                    />
+                  ))}
+                </div>
+              </>
             )}
           </>
         )}
