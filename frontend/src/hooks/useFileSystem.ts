@@ -69,6 +69,29 @@ export function useFileSystem() {
     }
   };
 
+  const zipItem = async (itemName: string) => {
+    try {
+      const itemPath = path === '/' ? `/${itemName}` : `${path}/${itemName}`;
+      const targetPath = `${itemPath}.zip`;
+      await api.zip(itemPath, targetPath);
+      refresh();
+    } catch (err: any) {
+      alert(`Zip failed: ${err.message}`);
+    }
+  };
+
+  const extractItem = async (itemName: string) => {
+    if (!itemName.endsWith('.zip')) return;
+    try {
+      const itemPath = path === '/' ? `/${itemName}` : `${path}/${itemName}`;
+      const targetPath = path; // Extract into current folder
+      await api.extract(itemPath, targetPath);
+      refresh();
+    } catch (err: any) {
+      alert(`Extract failed: ${err.message}`);
+    }
+  };
+
   return {
     path,
     files,
@@ -82,5 +105,7 @@ export function useFileSystem() {
     deleteItem,
     renameItem,
     createFolder,
+    zipItem,
+    extractItem,
   };
 }

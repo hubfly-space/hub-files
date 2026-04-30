@@ -8,10 +8,12 @@ interface FileItemProps {
   onNavigate: (name: string) => void;
   onDelete: (name: string) => void;
   onRename: (oldName: string, newName: string) => void;
+  onZip: (name: string) => void;
+  onExtract: (name: string) => void;
 }
 
 export const FileItem: React.FC<FileItemProps> = ({ 
-  file, viewMode, onNavigate, onDelete, onRename 
+  file, viewMode, onNavigate, onDelete, onRename, onZip, onExtract
 }) => {
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState(file.name);
@@ -80,6 +82,12 @@ export const FileItem: React.FC<FileItemProps> = ({
       <div className="hover-actions">
         <button onClick={() => setIsRenaming(true)}>✎</button>
         <button onClick={() => onDelete(file.name)}>✕</button>
+      </div>
+    </div>
+  );
+};
+k={() => setIsRenaming(true)}>✎</button>
+        <button title="Delete" onClick={() => onDelete(file.name)}>✕</button>
       </div>
     </div>
   );
