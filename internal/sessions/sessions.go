@@ -3,7 +3,6 @@ package sessions
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
 	"sync"
 	"time"
 )
