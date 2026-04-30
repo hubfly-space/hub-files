@@ -1,0 +1,86 @@
+import { useState, useEffect, useCallback } from 'react';
+import { api, FileInfo } from '../api';
+
+export function useFileSystem() {
+  const [path, setPath] = useState('/');
+  const [files, setFiles] = useState<FileInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+
+  const loadFiles = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.list(path);
+      setFiles(data);
+      setError(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [path]);
+
+  useEffect(() => {
+    loadFiles();
+  }, [loadFiles]);
+
+  const navigate = (newPath: string) => {
+    setPath(newPath);
+  };
+
+  const navigateUp = () => {
+    if (path === '/') return;
+    const parts = path.split('/').filter(Boolean);
+    parts.pop();
+    setPath('/' + parts.join('/'));
+  };
+
+  const refresh = () => loadFiles();
+
+  const deleteItem = async (itemName: string) => {
+    try {
+      const itemPath = path === '/' ? `/${itemName}` : `${path}/${itemName}`;
+      await api.delete(itemPath);
+      refresh();
+    } catch (err: any) {
+      alert(`Delete failed: ${err.message}`);
+    }
+  };
+
+  const renameItem = async (oldName: string, newName: string) => {
+    try {
+      const oldPath = path === '/' ? `/${oldName}` : `${path}/${oldName}`;
+      const newPath = path === '/' ? `/${newName}` : `${path}/${newName}`;
+      await api.rename(oldPath, newPath);
+      refresh();
+    } catch (err: any) {
+      alert(`Rename failed: ${err.message}`);
+    }
+  };
+
+  const createFolder = async (name: string) => {
+    try {
+      const folderPath = path === '/' ? `/${name}` : `${path}/${name}`;
+      await api.mkdir(folderPath);
+      refresh();
+    } catch (err: any) {
+      alert(`Create folder failed: ${err.message}`);
+    }
+  };
+
+  return {
+    path,
+    files,
+    loading,
+    error,
+    viewMode,
+    setViewMode,
+    navigate,
+    navigateUp,
+    refresh,
+    deleteItem,
+    renameItem,
+    createFolder,
+  };
+}
