@@ -1,10 +1,11 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import './index.css'
 import './App.css'
 import { useFileSystem } from './hooks/useFileSystem';
 import { Breadcrumb } from './components/Breadcrumb';
 import { Toolbar } from './components/Toolbar';
 import { FileItem } from './components/FileItem';
+import { FileViewer } from './components/FileViewer';
 import { api } from './api';
 
 function App() {
@@ -12,6 +13,8 @@ function App() {
     path, files, loading, error, viewMode, setViewMode,
     navigate, refresh, deleteItem, renameItem, createFolder
   } = useFileSystem();
+
+  const [openFile, setOpenFile] = useState<{ path: string, name: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -42,51 +45,63 @@ function App() {
       const newPath = path === '/' ? `/${name}` : `${path}/${name}`;
       navigate(newPath);
     } else {
-      // TODO: Open file preview
-      console.log('Open file:', name);
+      const filePath = path === '/' ? `/${name}` : `${path}/${name}`;
+      setOpenFile({ path: filePath, name });
     }
   };
 
   return (
     <div className="main-container">
-      <div className="header">
-        <Breadcrumb path={path} onNavigate={navigate} />
-        <Toolbar 
-          viewMode={viewMode}
-          onViewToggle={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
-          onRefresh={refresh}
-          onUpload={handleUploadClick}
-          onNewFolder={handleNewFolder}
-        />
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          style={{ display: 'none' }} 
-          onChange={handleFileChange}
-        />
-      </div>
+      {!openFile && (
+        <div className="header">
+          <Breadcrumb path={path} onNavigate={navigate} />
+          <Toolbar 
+            viewMode={viewMode}
+            onViewToggle={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+            onRefresh={refresh}
+            onUpload={handleUploadClick}
+            onNewFolder={handleNewFolder}
+          />
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            style={{ display: 'none' }} 
+            onChange={handleFileChange}
+          />
+        </div>
+      )}
       
       <div className="content">
-        {loading && <div className="empty-state">Loading...</div>}
-        {error && <div className="empty-state" style={{ color: 'red' }}>Error: {error}</div>}
-        
-        {!loading && !error && files.length === 0 && (
-          <div className="empty-state">This folder is empty</div>
-        )}
+        {openFile ? (
+          <FileViewer 
+            path={openFile.path} 
+            name={openFile.name} 
+            onClose={() => setOpenFile(null)} 
+          />
+        ) : (
+          <>
+            {loading && <div className="empty-state">Loading...</div>}
+            {error && <div className="empty-state" style={{ color: 'red' }}>Error: {error}</div>}
+            
+            {!loading && !error && files.length === 0 && (
+              <div className="empty-state">This folder is empty</div>
+            )}
 
-        {!loading && !error && files.length > 0 && (
-          <div className={viewMode === 'list' ? 'file-list' : 'file-grid'}>
-            {files.map(file => (
-              <FileItem 
-                key={file.name}
-                file={file}
-                viewMode={viewMode}
-                onNavigate={handleNavigate}
-                onDelete={deleteItem}
-                onRename={renameItem}
-              />
-            ))}
-          </div>
+            {!loading && !error && files.length > 0 && (
+              <div className={viewMode === 'list' ? 'file-list' : 'file-grid'}>
+                {files.map(file => (
+                  <FileItem 
+                    key={file.name}
+                    file={file}
+                    viewMode={viewMode}
+                    onNavigate={handleNavigate}
+                    onDelete={deleteItem}
+                    onRename={renameItem}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
