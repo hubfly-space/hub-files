@@ -242,7 +242,8 @@
   transition: border-color 0.2s;
 }
 
-.search-bar input:focus {
-  outline: none;
-  border-color: var(--accent-color);
+.content.dragging {
+  background-color: var(--accent-soft);
+  outline: 2px dashed var(--accent-color);
+  outline-offset: -10px;
 }
