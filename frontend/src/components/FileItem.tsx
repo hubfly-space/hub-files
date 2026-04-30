@@ -51,8 +51,12 @@ export const FileItem: React.FC<FileItemProps> = ({
           )}
         </div>
         <div className="hover-actions">
-          <button onClick={() => setIsRenaming(true)}>✎</button>
-          <button onClick={() => onDelete(file.name)}>✕</button>
+          <button title="Zip" onClick={() => onZip(file.name)}>📦</button>
+          {file.name.endsWith('.zip') && (
+            <button title="Extract" onClick={() => onExtract(file.name)}>📂</button>
+          )}
+          <button title="Rename" onClick={() => setIsRenaming(true)}>✎</button>
+          <button title="Delete" onClick={() => onDelete(file.name)}>✕</button>
         </div>
       </div>
     );
@@ -80,13 +84,11 @@ export const FileItem: React.FC<FileItemProps> = ({
         <span className="date">{file.modTime}</span>
       </div>
       <div className="hover-actions">
-        <button onClick={() => setIsRenaming(true)}>✎</button>
-        <button onClick={() => onDelete(file.name)}>✕</button>
-      </div>
-    </div>
-  );
-};
-k={() => setIsRenaming(true)}>✎</button>
+        <button title="Zip" onClick={() => onZip(file.name)}>📦</button>
+        {file.name.endsWith('.zip') && (
+          <button title="Extract" onClick={() => onExtract(file.name)}>📂</button>
+        )}
+        <button title="Rename" onClick={() => setIsRenaming(true)}>✎</button>
         <button title="Delete" onClick={() => onDelete(file.name)}>✕</button>
       </div>
     </div>
