@@ -1,28 +1,93 @@
+import { useRef } from 'react';
 import './index.css'
 import './App.css'
+import { useFileSystem } from './hooks/useFileSystem';
+import { Breadcrumb } from './components/Breadcrumb';
+import { Toolbar } from './components/Toolbar';
+import { FileItem } from './components/FileItem';
+import { api } from './api';
 
 function App() {
+  const {
+    path, files, loading, error, viewMode, setViewMode,
+    navigate, refresh, deleteItem, renameItem, createFolder
+  } = useFileSystem();
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        await api.upload(path, file);
+        refresh();
+      } catch (err: any) {
+        alert(`Upload failed: ${err.message}`);
+      }
+    }
+  };
+
+  const handleNewFolder = () => {
+    const name = prompt('Folder name:');
+    if (name) createFolder(name);
+  };
+
+  const handleNavigate = (name: string) => {
+    const item = files.find(f => f.name === name);
+    if (item?.isDir) {
+      const newPath = path === '/' ? `/${name}` : `${path}/${name}`;
+      navigate(newPath);
+    } else {
+      // TODO: Open file preview
+      console.log('Open file:', name);
+    }
+  };
+
   return (
     <div className="main-container">
       <div className="header">
-        <div className="breadcrumb">
-          <span>/</span>
-          <span>projects</span>
-          <span>/</span>
-          <span>website</span>
-          <span className="active">●</span>
-        </div>
-        <div className="actions">
-          <button title="Upload">⬆</button>
-          <button title="New">＋</button>
-          <button title="Refresh">⟳</button>
-          <button title="View Toggle">⧉</button>
-        </div>
+        <Breadcrumb path={path} onNavigate={navigate} />
+        <Toolbar 
+          viewMode={viewMode}
+          onViewToggle={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+          onRefresh={refresh}
+          onUpload={handleUploadClick}
+          onNewFolder={handleNewFolder}
+        />
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          style={{ display: 'none' }} 
+          onChange={handleFileChange}
+        />
       </div>
+      
       <div className="content">
-        <div className="empty-state">
-          This folder is empty
-        </div>
+        {loading && <div className="empty-state">Loading...</div>}
+        {error && <div className="empty-state" style={{ color: 'red' }}>Error: {error}</div>}
+        
+        {!loading && !error && files.length === 0 && (
+          <div className="empty-state">This folder is empty</div>
+        )}
+
+        {!loading && !error && files.length > 0 && (
+          <div className={viewMode === 'list' ? 'file-list' : 'file-grid'}>
+            {files.map(file => (
+              <FileItem 
+                key={file.name}
+                file={file}
+                viewMode={viewMode}
+                onNavigate={handleNavigate}
+                onDelete={deleteItem}
+                onRename={renameItem}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
