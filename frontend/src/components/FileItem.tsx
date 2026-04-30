@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileInfo } from '../api';
+import type { FileInfo } from '../api';
 import { FileIcon } from './FileIcon';
 
 interface FileItemProps {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api, FileInfo } from '../api';
+import { api } from '../api';
+import type { FileInfo } from '../api';
 
 export function useFileSystem() {
   const [path, setPath] = useState('/');
