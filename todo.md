@@ -1,9 +1,9 @@
 # HubFly Files - To-Do List
 
 ## 1. Project Setup
-- [ ] Initialize Go module.
-- [ ] Initialize React frontend project (Vite + React + TS recommended for speed).
-- [ ] Set up basic backend directory structure (`cmd`, `internal`).
+- [x] Initialize Go module.
+- [x] Initialize React frontend project.
+- [x] Set up basic backend directory structure (`cmd`, `internal`).
 - [ ] Configure `.gitignore` for Go and Node.js.
 
 ## 2. Backend Implementation (Go)

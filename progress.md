@@ -3,10 +3,9 @@
 ## Completed
 - Initialized repository.
 - Created project tracking files (`todo.md`, `progress.md`).
+- Scaffolded Go backend structure.
+- Scaffolded React frontend with Vite and TypeScript.
 
 ## In Progress
-- Setting up the backend and frontend scaffolds.
-
-## Next Steps
-- Initialize Go module and setup `cmd` and `internal` directories.
-- Initialize React frontend in `frontend/` directory (or root).
+- Configuring `.gitignore`.
+- Implementing backend configuration and main entry point.
