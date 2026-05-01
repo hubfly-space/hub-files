@@ -40,8 +40,8 @@
 - [x] Implement Drag-and-drop upload (Visual feedback).
 - [x] Implement Search (Focused, immediate).
 
-
 ## 4. Final Polish & Testing
 - [x] Verify security rules (Path traversal blocking).
 - [x] Verify UI pixel-perfect spacing and smooth transitions.
 - [x] End-to-end testing of session flow.
+- [x] Advanced UI remake with Shadcn and Tailwind.
