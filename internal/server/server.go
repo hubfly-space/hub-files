@@ -64,8 +64,11 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			// Check for demo mode if no session
 			if token == "" || token == "demo" {
 				session = &sessions.Session{
-					Root:     s.Config.DemoDir,
-					ReadOnly: true,
+					Root:        s.Config.DemoDir,
+					ReadOnly:    true,
+					AllowUpload:  false,
+					AllowEdit:    false,
+					AllowDelete:  false,
 				}
 				// Ensure demo dir exists
 				os.MkdirAll(s.Config.DemoDir, 0755)
@@ -80,6 +83,22 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		if session.ReadOnly {
 			r.Header.Set("X-Session-ReadOnly", "true")
 		}
+		// Inject permission flags
+		if session.AllowUpload {
+			r.Header.Set("X-Session-AllowUpload", "true")
+		} else {
+			r.Header.Set("X-Session-AllowUpload", "false")
+		}
+		if session.AllowEdit {
+			r.Header.Set("X-Session-AllowEdit", "true")
+		} else {
+			r.Header.Set("X-Session-AllowEdit", "false")
+		}
+		if session.AllowDelete {
+			r.Header.Set("X-Session-AllowDelete", "true")
+		} else {
+			r.Header.Set("X-Session-AllowDelete", "false")
+		}
 
 		next(w, r)
 	}
@@ -91,6 +110,20 @@ func (s *Server) checkReadOnly(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	return false
+}
+
+func (s *Server) checkPermission(w http.ResponseWriter, r *http.Request, permFlag string) bool {
+	if r.Header.Get("X-Session-ReadOnly") == "true" {
+		http.Error(w, "Read-only session", http.StatusForbidden)
+		return false
+	}
+	
+	sessionPerm := r.Header.Get("X-Session-" + permFlag)
+	if sessionPerm == "false" {
+		http.Error(w, permFlag+" not allowed for this session", http.StatusForbidden)
+		return false
+	}
+	return true
 }
 
 func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +157,7 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
-	if s.checkReadOnly(w, r) {
+	if !s.checkPermission(w, r, "AllowEdit") {
 		return
 	}
 	root := r.Header.Get("X-Session-Root")
@@ -140,7 +173,7 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
-	if s.checkReadOnly(w, r) {
+	if !s.checkPermission(w, r, "AllowUpload") {
 		return
 	}
 
@@ -217,7 +250,7 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
-	if s.checkReadOnly(w, r) {
+	if !s.checkPermission(w, r, "AllowDelete") {
 		return
 	}
 	root := r.Header.Get("X-Session-Root")
@@ -302,9 +335,12 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Root       string `json:"root"`
-		TTLSeconds int    `json:"ttlSeconds"`
-		ReadOnly   bool   `json:"readonly"`
+		Root        string `json:"root"`
+		TTLSeconds  int    `json:"ttlSeconds"`
+		ReadOnly    bool   `json:"readonly"`
+		AllowUpload bool   `json:"allowUpload"`
+		AllowEdit   bool   `json:"allowEdit"`
+		AllowDelete bool   `json:"allowDelete"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -329,7 +365,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := s.Sessions.CreateSession(absRoot, req.TTLSeconds, req.ReadOnly)
+	session, err := s.Sessions.CreateSession(absRoot, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete)
 	if err != nil {
 		log.Printf("CreateSession error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

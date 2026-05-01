@@ -9,10 +9,13 @@ import (
 )
 
 type Session struct {
-	Code      string    `json:"sessionCode"`
-	Root      string    `json:"root"`
-	ExpiresAt time.Time `json:"expiresAt"`
-	ReadOnly  bool      `json:"readonly"`
+	Code        string    `json:"sessionCode"`
+	Root        string    `json:"root"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+	ReadOnly    bool      `json:"readonly"`
+	AllowUpload bool      `json:"allowUpload"`
+	AllowEdit   bool      `json:"allowEdit"`
+	AllowDelete bool      `json:"allowDelete"`
 }
 
 type Store struct {
@@ -33,7 +36,7 @@ func NewStore() *Store {
 	return store
 }
 
-func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool) (*Session, error) {
+func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool) (*Session, error) {
 	// Rate limiting: max 10 session creations per minute
 	s.createMu.Lock()
 	now := time.Now()
@@ -59,10 +62,13 @@ func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool) (*Sess
 	}
 
 	session := &Session{
-		Code:      token,
-		Root:      root,
-		ExpiresAt: time.Now().Add(time.Duration(ttlSeconds) * time.Second),
-		ReadOnly:  readonly,
+		Code:        token,
+		Root:        root,
+		ExpiresAt:   time.Now().Add(time.Duration(ttlSeconds) * time.Second),
+		ReadOnly:    readonly,
+		AllowUpload:  allowUpload,
+		AllowEdit:    allowEdit,
+		AllowDelete:  allowDelete,
 	}
 
 	s.mu.Lock()
