@@ -1,4 +1,5 @@
-const API_BASE = 'http://localhost:8080/api';
+// Use relative URL for API calls - works with same-origin or reverse proxy
+const API_BASE = '/api';
 
 export interface FileInfo {
   name: string;

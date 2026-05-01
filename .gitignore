@@ -1,1 +1,20 @@
-.material
+
+
+# Go
+bin/
+hubfly-files
+*.exe
+*.test
+*.prof
+go.sum
+
+# Node.js
+node_modules/
+dist/
+.DS_Store
+.env
+*.log
+frontend/node_modules/
+frontend/dist/
+package-lock.json
+bun.lockb

@@ -113,7 +113,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ path, name, onClose }) =
         {isImage ? (
           <div className="h-full flex items-center justify-center p-6">
             <img
-              src={`http://localhost:8080/api/file?path=${encodeURIComponent(path)}&session=${api.getToken()}`}
+              src={`/api/file?path=${encodeURIComponent(path)}`}
               alt={name}
               className="max-w-full max-h-full rounded-lg object-contain"
             />
