@@ -45,7 +45,7 @@ export function useFileSystem() {
       await api.delete(itemPath);
       refresh();
     } catch (err: any) {
-      alert(`Delete failed: ${err.message}`);
+      console.error(err);
     }
   };
 
@@ -56,7 +56,7 @@ export function useFileSystem() {
       await api.rename(oldPath, newPath);
       refresh();
     } catch (err: any) {
-      alert(`Rename failed: ${err.message}`);
+      console.error(err);
     }
   };
 
@@ -66,7 +66,7 @@ export function useFileSystem() {
       await api.mkdir(folderPath);
       refresh();
     } catch (err: any) {
-      alert(`Create folder failed: ${err.message}`);
+      console.error(err);
     }
   };
 
@@ -77,7 +77,7 @@ export function useFileSystem() {
       await api.zip(itemPath, targetPath);
       refresh();
     } catch (err: any) {
-      alert(`Zip failed: ${err.message}`);
+      console.error(err);
     }
   };
 
@@ -85,11 +85,11 @@ export function useFileSystem() {
     if (!itemName.endsWith('.zip')) return;
     try {
       const itemPath = path === '/' ? `/${itemName}` : `${path}/${itemName}`;
-      const targetPath = path; // Extract into current folder
+      const targetPath = path; 
       await api.extract(itemPath, targetPath);
       refresh();
     } catch (err: any) {
-      alert(`Extract failed: ${err.message}`);
+      console.error(err);
     }
   };
 

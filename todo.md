@@ -26,19 +26,20 @@
 - [x] Integrate servers in `main.go` and add CORS support.
 
 ## 3. Frontend Implementation (React)
-- [x] Set up basic styling (Vanilla CSS, variables for Light/Dark mode).
-- [x] Implement Main Container Layout (Centered, max-width, rounded corners, soft shadow).
-- [x] Implement Breadcrumb & Top actions header (Upload, New, Refresh, View Toggle).
+- [x] Set up basic styling (Tailwind CSS).
+- [x] Integrate Shadcn UI components.
+- [x] Implement Main Container Layout (Centered, glassmorphism, floating card).
+- [x] Implement Breadcrumb (Lucide icons, polished).
+- [x] Implement Toolbar (Search integration, tooltips).
 - [x] Implement File Explorer Views:
-  - [x] List View (compact rows, hover actions).
-  - [x] Grid View (medium cards, centered icons).
-- [x] Implement API client (`src/api`).
-- [x] Implement File Actions (Rename, Delete, Download).
-- [x] Implement File Editor / Preview (Text editor, Image preview).
-- [x] Implement Drag-and-drop upload.
-- [x] Implement Zip / Extract UI.
-- [x] Implement Search within directory.
-- [x] Implement Empty folder & Session expired states (handled via error states).
+  - [x] List View (Framer Motion animations, polished).
+  - [x] Grid View (Compact cards, hover states).
+- [x] Implement Custom Modals (Rename, Delete, New Folder) using Shadcn Dialog.
+- [x] Implement Feedback System (Shadcn Toast).
+- [x] Implement File Editor / Preview (Advanced layout, save feedback).
+- [x] Implement Drag-and-drop upload (Visual feedback).
+- [x] Implement Search (Focused, immediate).
+
 
 ## 4. Final Polish & Testing
 - [x] Verify security rules (Path traversal blocking).
