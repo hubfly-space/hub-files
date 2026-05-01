@@ -247,47 +247,31 @@ function App() {
                     </div>
                   </motion.div>
                 ) : (
-                  <motion.div
-                    key={viewMode}
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                    className={cn(
-                      viewMode === 'list' ? 'space-y-1' : 'file-grid-layout'
-                    )}
-                  >
-                    {filteredFiles.map((file, i) => (
-                      <motion.div
+                  <div className={cn(
+                    viewMode === 'list' ? 'space-y-1' : 'file-grid-layout'
+                  )}>
+                    {filteredFiles.map((file) => (
+                      <FileItem
                         key={file.name}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          duration: 0.2,
-                          delay: i * 0.02,
-                          ease: [0.4, 0, 0.2, 1]
+                        file={file}
+                        viewMode={viewMode}
+                        isSelected={selectedItems.has(file.name)}
+                        selectionMode={selectionMode}
+                        onNavigate={handleNavigate}
+                        onSelect={handleSelect}
+                        onDelete={(name) => setDeleteConfirm({ open: true, names: [name] })}
+                        onRename={(name) => setRenameDialog({ open: true, oldName: name, newName: name })}
+                        onZip={(name) => {
+                          zipItem(name);
+                          toast({ title: "Archiving", description: `Zipping ${name}...` });
                         }}
-                      >
-                        <FileItem
-                          file={file}
-                          viewMode={viewMode}
-                          isSelected={selectedItems.has(file.name)}
-                          selectionMode={selectionMode}
-                          onNavigate={handleNavigate}
-                          onSelect={handleSelect}
-                          onDelete={(name) => setDeleteConfirm({ open: true, names: [name] })}
-                          onRename={(name) => setRenameDialog({ open: true, oldName: name, newName: name })}
-                          onZip={(name) => {
-                            zipItem(name);
-                            toast({ title: "Archiving", description: `Zipping ${name}...` });
-                          }}
-                          onExtract={(name) => {
-                            extractItem(name);
-                            toast({ title: "Extracting", description: `Extracting ${name}...` });
-                          }}
-                        />
-                      </motion.div>
+                        onExtract={(name) => {
+                          extractItem(name);
+                          toast({ title: "Extracting", description: `Extracting ${name}...` });
+                        }}
+                      />
                     ))}
-                  </motion.div>
+                  </div>
                 )}
               </AnimatePresence>
             </div>

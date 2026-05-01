@@ -18,7 +18,6 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
 import { cn } from '@/lib/utils';
 
 interface FileItemProps {
@@ -51,7 +50,6 @@ export const FileItem: React.FC<FileItemProps> = ({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-
     if (isDoubleClick.current) {
       isDoubleClick.current = false;
       return;
@@ -71,27 +69,16 @@ export const FileItem: React.FC<FileItemProps> = ({
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     isDoubleClick.current = true;
-
     if (clickTimeout.current) {
       clearTimeout(clickTimeout.current);
       clickTimeout.current = null;
     }
-
     onNavigate(file.name);
-  };
-
-  const itemAnimation = {
-    initial: { opacity: 0, y: 10 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, scale: 0.95 },
-    transition: { duration: 0.2 }
   };
 
   if (viewMode === 'grid') {
     return (
-      <motion.div
-        {...itemAnimation}
-        layout
+      <div
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         className={cn(
@@ -131,14 +118,12 @@ export const FileItem: React.FC<FileItemProps> = ({
             onExtract={onExtract}
           />
         </div>
-      </motion.div>
+      </div>
     );
   }
 
   return (
-    <motion.div
-      {...itemAnimation}
-      layout
+    <div
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       className={cn(
@@ -178,7 +163,7 @@ export const FileItem: React.FC<FileItemProps> = ({
           />
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 

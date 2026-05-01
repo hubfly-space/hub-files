@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 
 interface FileViewerProps {
@@ -77,11 +76,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({ path, name, onClose }) =
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="flex flex-col h-full"
-    >
+    <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={onClose} className="rounded-lg">
@@ -105,20 +100,12 @@ export const FileViewer: React.FC<FileViewerProps> = ({ path, name, onClose }) =
             </Button>
           )}
 
-          <AnimatePresence>
-            {isEditing && (
-              <motion.div
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-              >
-                <Button size="sm" onClick={handleSave}>
-                  <Save className="w-4 h-4 mr-2" />
-                  Save
-                </Button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {isEditing && (
+            <Button size="sm" onClick={handleSave}>
+              <Save className="w-4 h-4 mr-2" />
+              Save
+            </Button>
+          )}
         </div>
       </div>
 
@@ -149,6 +136,6 @@ export const FileViewer: React.FC<FileViewerProps> = ({ path, name, onClose }) =
           </ScrollArea>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 };
