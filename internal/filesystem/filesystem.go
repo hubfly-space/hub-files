@@ -35,7 +35,26 @@ func SafePath(root, subPath string) (string, error) {
 		return "", ErrUnauthorized
 	}
 
-	return absFinal, nil
+	// Resolve symlinks to prevent symlink traversal attacks
+	resolved, err := filepath.EvalSymlinks(absFinal)
+	if err != nil {
+		// If file doesn't exist yet (for write operations), check parent
+		parent := filepath.Dir(absFinal)
+		resolvedParent, err2 := filepath.EvalSymlinks(parent)
+		if err2 != nil {
+			return "", ErrUnauthorized
+		}
+		if !strings.HasPrefix(resolvedParent, absRoot) {
+			return "", ErrUnauthorized
+		}
+		return absFinal, nil
+	}
+
+	if !strings.HasPrefix(resolved, absRoot) {
+		return "", ErrUnauthorized
+	}
+
+	return resolved, nil
 }
 
 func ListDir(root, subPath string) ([]FileInfo, error) {

@@ -3,6 +3,7 @@ package sessions
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -15,19 +16,43 @@ type Session struct {
 }
 
 type Store struct {
-	sessions map[string]*Session
-	mu       sync.RWMutex
+	sessions    map[string]*Session
+	mu          sync.RWMutex
+	createLog   []time.Time
+	maxSessions int
+	createMu    sync.Mutex
 }
 
 func NewStore() *Store {
 	store := &Store{
-		sessions: make(map[string]*Session),
+		sessions:    make(map[string]*Session),
+		createLog:   make([]time.Time, 0),
+		maxSessions: 1000,
 	}
 	go store.cleanupRoutine()
 	return store
 }
 
 func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool) (*Session, error) {
+	// Rate limiting: max 10 session creations per minute
+	s.createMu.Lock()
+	now := time.Now()
+	// Remove entries older than 1 minute
+	cutoff := now.Add(-1 * time.Minute)
+	valid := make([]time.Time, 0, len(s.createLog))
+	for _, t := range s.createLog {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	s.createLog = valid
+	if len(s.createLog) >= 10 {
+		s.createMu.Unlock()
+		return nil, fmt.Errorf("rate limit exceeded: max 10 sessions per minute")
+	}
+	s.createLog = append(s.createLog, now)
+	s.createMu.Unlock()
+
 	token, err := generateToken(32)
 	if err != nil {
 		return nil, err
@@ -42,6 +67,12 @@ func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool) (*Sess
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Check max sessions limit
+	if len(s.sessions) >= s.maxSessions {
+		return nil, fmt.Errorf("max sessions limit reached: %d", s.maxSessions)
+	}
+
 	s.sessions[token] = session
 
 	return session, nil

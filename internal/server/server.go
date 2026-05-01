@@ -7,10 +7,18 @@ import (
 	"hubfly-files/internal/filesystem"
 	"hubfly-files/internal/sessions"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+)
+
+const (
+	// MaxUploadSize is the maximum allowed upload size (10 MB)
+	MaxUploadSize = 10 << 20
+	// MaxRequestSize is the maximum allowed request body size (1 MB for JSON)
+	MaxRequestSize = 1 << 20
 )
 
 type Server struct {
@@ -25,12 +33,30 @@ func NewServer(cfg *config.Config, store *sessions.Store) *Server {
 	}
 }
 
+// maxBytesMiddleware limits the request body size
+func maxBytesMiddleware(n int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, n)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // Middleware to validate session
 func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
 		if strings.HasPrefix(token, "Bearer ") {
 			token = strings.TrimPrefix(token, "Bearer ")
+		}
+
+		// Also check query parameter for compatibility (but log warning)
+		if token == "" {
+			token = r.URL.Query().Get("session")
+			if token != "" {
+				log.Printf("Warning: Using session token from URL query parameter - this is insecure")
+			}
 		}
 
 		session, ok := s.Sessions.GetSession(token)
@@ -49,8 +75,7 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
-		// Inject session into context or just pass it to handlers
-		// For simplicity, we'll pass it in the request header or just use it here
+		// Inject session info into request headers
 		r.Header.Set("X-Session-Root", session.Root)
 		if session.ReadOnly {
 			r.Header.Set("X-Session-ReadOnly", "true")
@@ -74,7 +99,8 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 
 	files, err := filesystem.ListDir(root, path)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("List error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -88,7 +114,8 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 
 	reader, err := filesystem.ReadFile(root, path)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("GetFile error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	defer reader.Close()
@@ -105,7 +132,8 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 
 	err := filesystem.WriteFile(root, path, r.Body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("PutFile error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -115,12 +143,22 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	if s.checkReadOnly(w, r) {
 		return
 	}
+
+	// Limit request body size for uploads
+	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
+
 	root := r.Header.Get("X-Session-Root")
 	path := r.FormValue("path")
 
+	// Parse multipart form with size limit
+	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
+		http.Error(w, "File too large (max 10MB)", http.StatusRequestEntityTooLarge)
+		return
+	}
+
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid file upload", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
@@ -128,7 +166,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	finalPath := filepath.Join(path, header.Filename)
 	err = filesystem.WriteFile(root, finalPath, file)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Upload error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -140,11 +179,15 @@ func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {
 	}
 	root := r.Header.Get("X-Session-Root")
 	var req struct{ Path string `json:"path"` }
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
 	err := filesystem.Mkdir(root, req.Path)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Mkdir error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -159,11 +202,15 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 		OldPath string `json:"oldPath"`
 		NewPath string `json:"newPath"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
 	err := filesystem.Rename(root, req.OldPath, req.NewPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Rename error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -178,7 +225,8 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 
 	err := filesystem.DeleteFile(root, path)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Delete error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -193,14 +241,26 @@ func (s *Server) handleZip(w http.ResponseWriter, r *http.Request) {
 		Source string `json:"source"`
 		Target string `json:"target"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
-	src, _ := filesystem.SafePath(root, req.Source)
-	dst, _ := filesystem.SafePath(root, req.Target)
-
-	err := archive.Zip(src, dst)
+	src, err := filesystem.SafePath(root, req.Source)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Invalid source path", http.StatusBadRequest)
+		return
+	}
+	dst, err := filesystem.SafePath(root, req.Target)
+	if err != nil {
+		http.Error(w, "Invalid target path", http.StatusBadRequest)
+		return
+	}
+
+	err = archive.Zip(src, dst)
+	if err != nil {
+		log.Printf("Zip error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -215,14 +275,26 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 		Source string `json:"source"`
 		Target string `json:"target"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
-	src, _ := filesystem.SafePath(root, req.Source)
-	dst, _ := filesystem.SafePath(root, req.Target)
-
-	err := archive.Unzip(src, dst)
+	src, err := filesystem.SafePath(root, req.Source)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Invalid source path", http.StatusBadRequest)
+		return
+	}
+	dst, err := filesystem.SafePath(root, req.Target)
+	if err != nil {
+		http.Error(w, "Invalid target path", http.StatusBadRequest)
+		return
+	}
+
+	err = archive.Unzip(src, dst)
+	if err != nil {
+		log.Printf("Unzip error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -235,13 +307,32 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		ReadOnly   bool   `json:"readonly"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	session, err := s.Sessions.CreateSession(req.Root, req.TTLSeconds, req.ReadOnly)
+	// Validate inputs
+	if req.Root == "" {
+		http.Error(w, "root is required", http.StatusBadRequest)
+		return
+	}
+	if req.TTLSeconds <= 0 || req.TTLSeconds > 86400*30 { // Max 30 days
+		http.Error(w, "ttlSeconds must be between 1 and 2592000", http.StatusBadRequest)
+		return
+	}
+
+	// Clean and validate the root path
+	cleanRoot := filepath.Clean(req.Root)
+	absRoot, err := filepath.Abs(cleanRoot)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Invalid root path", http.StatusBadRequest)
+		return
+	}
+
+	session, err := s.Sessions.CreateSession(absRoot, req.TTLSeconds, req.ReadOnly)
+	if err != nil {
+		log.Printf("CreateSession error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -262,11 +353,12 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 		}
 	}))
 	mux.HandleFunc("/api/upload", s.authMiddleware(s.handleUpload))
-	mux.HandleFunc("/api/mkdir", s.authMiddleware(s.handleMkdir))
-	mux.HandleFunc("/api/rename", s.authMiddleware(s.handleRename))
-	mux.HandleFunc("/api/delete", s.authMiddleware(s.handleDelete))
-	mux.HandleFunc("/api/zip", s.authMiddleware(s.handleZip))
-	mux.HandleFunc("/api/extract", s.authMiddleware(s.handleExtract))
+	// JSON endpoints with max bytes middleware
+	mux.Handle("/api/mkdir", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleMkdir)))
+	mux.Handle("/api/rename", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleRename)))
+	mux.Handle("/api/delete", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleDelete)))
+	mux.Handle("/api/zip", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleZip)))
+	mux.Handle("/api/extract", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleExtract)))
 
 	return mux
 }
