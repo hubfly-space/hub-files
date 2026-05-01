@@ -24,6 +24,7 @@ func Zip(source, target string) error {
 		return err
 	}
 
+	// Get the base directory name for relative paths
 	var baseDir string
 	if info.IsDir() {
 		baseDir = filepath.Base(source)
@@ -34,14 +35,25 @@ func Zip(source, target string) error {
 			return err
 		}
 
+		// Calculate relative path for zip entry
+		var entryPath string
+		if baseDir != "" {
+			// For directories, we want to include the base directory
+			relPath, err := filepath.Rel(source, path)
+			if err != nil {
+				return err
+			}
+			entryPath = filepath.Join(baseDir, relPath)
+		} else {
+			entryPath = filepath.Base(path)
+		}
+
 		header, err := zip.FileInfoHeader(info)
 		if err != nil {
 			return err
 		}
 
-		if baseDir != "" {
-			header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, source))
-		}
+		header.Name = entryPath
 
 		if info.IsDir() {
 			header.Name += "/"
