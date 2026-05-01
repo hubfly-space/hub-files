@@ -46,6 +46,7 @@ export function useFileSystem() {
       refresh();
     } catch (err: any) {
       console.error(err);
+      throw err; // Re-throw so caller can show toast
     }
   };
 
@@ -57,6 +58,7 @@ export function useFileSystem() {
       refresh();
     } catch (err: any) {
       console.error(err);
+      throw err;
     }
   };
 
@@ -67,17 +69,20 @@ export function useFileSystem() {
       refresh();
     } catch (err: any) {
       console.error(err);
+      throw err;
     }
   };
 
   const zipItem = async (itemName: string) => {
     try {
       const itemPath = path === '/' ? `/${itemName}` : `${path}/${itemName}`;
-      const targetPath = `${itemPath}.zip`;
+      // Only append .zip if not already a zip file
+      const targetPath = itemName.endsWith('.zip') ? itemPath : `${itemPath}.zip`;
       await api.zip(itemPath, targetPath);
       refresh();
     } catch (err: any) {
       console.error(err);
+      throw err;
     }
   };
 
@@ -90,6 +95,7 @@ export function useFileSystem() {
       refresh();
     } catch (err: any) {
       console.error(err);
+      throw err;
     }
   };
 

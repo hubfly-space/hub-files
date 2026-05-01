@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   Upload,
   RefreshCw,
@@ -24,6 +24,18 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from '@/lib/utils';
 
+// Debounce utility
+function useDebounce<T extends (...args: any[]) => any>(
+  callback: T,
+  delay: number
+): T {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  return ((...args: any[]) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => callback(...args), delay);
+  }) as T;
+}
+
 interface ToolbarProps {
   viewMode: 'list' | 'grid';
   onViewToggle: () => void;
@@ -45,6 +57,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   viewMode, onViewToggle, onRefresh, onUpload, onNewFolder, search, onSearchChange,
   selectionMode, onSelectionModeToggle, selectedCount, onBulkDelete, onBulkZip, onClearSelection
 }) => {
+  // Debounced search handler
+  const debouncedSearch = useCallback(
+    useDebounce((value: string) => onSearchChange(value), 300),
+    [onSearchChange]
+  );
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    debouncedSearch(e.target.value);
+  };
+
   return (
     <TooltipProvider>
       <div className="flex items-center gap-3 px-6 py-2">
@@ -74,8 +96,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
             <Input
               placeholder="Search files..."
-              value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
+              defaultValue={search}
+              onChange={handleSearchChange}
               className="pl-9 h-9 bg-secondary/50 border-0 focus-visible:ring-1 focus-visible:ring-foreground/20 rounded-lg"
             />
           </div>

@@ -21,7 +21,7 @@ func Zip(source, target string) error {
 
 	info, err := os.Stat(source)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	var baseDir string
@@ -29,7 +29,7 @@ func Zip(source, target string) error {
 		baseDir = filepath.Base(source)
 	}
 
-	filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -78,6 +78,11 @@ func Unzip(source, target string) error {
 	defer reader.Close()
 
 	for _, f := range reader.File {
+		// Reject symlinks to prevent ZipSlip variant attacks
+		if f.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("symlinks are not allowed in zip files: %s", f.Name)
+		}
+
 		path := filepath.Join(target, f.Name)
 
 		// Check for ZipSlip vulnerability
@@ -86,21 +91,24 @@ func Unzip(source, target string) error {
 		}
 
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(path, os.ModePerm)
+			os.MkdirAll(path, 0755)
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
 
-		outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		// Use safe permissions instead of preserving from zip
+		var fileMode os.FileMode = 0644
+		outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode)
 		if err != nil {
 			return err
 		}
 
 		rc, err := f.Open()
 		if err != nil {
+			outFile.Close()
 			return err
 		}
 
