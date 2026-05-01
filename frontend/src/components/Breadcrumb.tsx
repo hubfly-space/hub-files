@@ -9,17 +9,17 @@ interface BreadcrumbProps {
 
 export const Breadcrumb: React.FC<BreadcrumbProps> = ({ path, onNavigate }) => {
   const parts = path.split('/').filter(Boolean);
-  
+
   return (
-    <nav className="flex items-center space-x-1 text-sm text-muted-foreground font-medium overflow-x-auto no-scrollbar py-2">
-      <button 
+    <nav className="flex items-center gap-1 text-sm overflow-x-auto no-scrollbar">
+      <button
         onClick={() => onNavigate('/')}
-        className="flex items-center hover:text-foreground transition-colors p-1 rounded-md hover:bg-accent"
+        className="flex items-center hover:bg-secondary p-1.5 rounded-md transition-colors shrink-0"
       >
         <Home className="w-4 h-4" />
       </button>
 
-      {parts.length > 0 && <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />}
+      {parts.length > 0 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />}
 
       {parts.map((part, i) => {
         const isLast = i === parts.length - 1;
@@ -27,22 +27,20 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({ path, onNavigate }) => {
 
         return (
           <React.Fragment key={i}>
-            <button 
+            <button
               onClick={() => onNavigate(currentPath)}
               disabled={isLast}
               className={cn(
-                "flex items-center hover:text-foreground transition-colors p-1 px-2 rounded-md",
-                isLast ? "text-foreground cursor-default font-semibold" : "hover:bg-accent"
+                "px-2 py-1.5 rounded-md transition-colors truncate shrink-0",
+                isLast ? "text-foreground font-medium cursor-default" : "hover:bg-secondary"
               )}
             >
               {part}
             </button>
-            {!isLast && <ChevronRight className="w-4 h-4 text-muted-foreground/50 shrink-0" />}
+            {!isLast && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />}
           </React.Fragment>
         );
       })}
-      
-      <span className="ml-2 w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
     </nav>
   );
 };
