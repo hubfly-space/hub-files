@@ -28,6 +28,7 @@ function App() {
     files,
     loading,
     error,
+    storage,
     viewMode,
     setViewMode,
     navigate,
@@ -63,6 +64,17 @@ function App() {
     open: boolean;
     names: string[];
   }>({ open: false, names: [] });
+
+  const formatBytes = (bytes: number) => {
+    if (bytes <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+    const exponent = Math.min(
+      Math.floor(Math.log(bytes) / Math.log(1024)),
+      units.length - 1,
+    );
+    const value = bytes / 1024 ** exponent;
+    return `${value >= 100 || exponent === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[exponent]}`;
+  };
 
   const filteredFiles = files.filter((f) =>
     f.name.toLowerCase().includes(search.toLowerCase()),
@@ -225,19 +237,53 @@ function App() {
       <div className="w-full h-full flex flex-col overflow-hidden bg-background">
         {!openFile && (
           <div className="shrink-0 border-b border-border/50 bg-background/80 backdrop-blur-xl sticky top-0 z-30">
-            <div className="flex items-center justify-between px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center text-background font-bold text-sm">
-                  H
+            <div className="flex flex-col gap-4 px-6 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center text-background font-bold text-sm">
+                    H
+                  </div>
+                  <h1 className="text-lg font-semibold tracking-tight">
+                    HubFly{" "}
+                    <span className="text-muted-foreground font-normal">
+                      Files
+                    </span>
+                  </h1>
                 </div>
-                <h1 className="text-lg font-semibold tracking-tight">
-                  HubFly{" "}
-                  <span className="text-muted-foreground font-normal">
-                    Files
-                  </span>
-                </h1>
+                <Breadcrumb path={path} onNavigate={navigate} />
               </div>
-              <Breadcrumb path={path} onNavigate={navigate} />
+              {storage && (
+                <div className="rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                        Mounted volume
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {formatBytes(storage.totalBytes)} total
+                        <span className="text-muted-foreground"> • </span>
+                        {formatBytes(storage.usedBytes)} used
+                        <span className="text-muted-foreground"> • </span>
+                        {formatBytes(storage.availableBytes)} free
+                      </p>
+                    </div>
+                    <div className="min-w-[7rem] text-right">
+                      <p className="text-2xl font-semibold tracking-tight">
+                        {storage.usedPercent.toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">used</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-border/70">
+                    <div
+                      className="h-full rounded-full bg-foreground transition-[width] duration-300"
+                      style={{
+                        width: `${Math.max(0, Math.min(storage.usedPercent, 100))}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <Toolbar

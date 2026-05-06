@@ -1,1 +1,63 @@
-## README
+# HubFly Files
+
+HubFly Files is a Go-based file browser with a React UI, a management API for session creation, and a Linux release flow that ships the backend plus the built web UI together.
+
+## Default ports
+
+- `10014`: management API
+- `10015`: UI and file API
+
+## Linux install and update
+
+Install the latest release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hubfly-space/hub-files/main/scripts/install.sh | bash
+```
+
+Install a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hubfly-space/hub-files/main/scripts/install.sh | bash -s -- --version v1.0.0
+```
+
+Re-running the installer updates an existing installation in place:
+
+- replaces the `hubfly-files` binary
+- refreshes the shipped web assets under `/opt/hubfly-files/web`
+- preserves `/etc/hubfly-files/hubfly-files.env`
+- restarts the `hubfly-files` systemd service if it already exists
+
+## Local development
+
+Build the frontend first:
+
+```bash
+cd frontend
+npm ci
+npm run build
+```
+
+Then run the Go server from the repository root:
+
+```bash
+go run ./cmd/hubfly-files
+```
+
+The server reads built UI assets from `./frontend/dist` by default. Override that path with `HUBFLY_UI_DIR` or `-ui-dir`.
+
+## Release process
+
+Push a tag such as `v1.0.0` and GitHub Actions will:
+
+- build the frontend
+- package Linux `amd64` and `arm64` release archives
+- publish the archives and a checksums file to the GitHub release
+
+Each archive contains:
+
+- `bin/hubfly-files`
+- `web/` built UI assets
+- `systemd/hubfly-files.service`
+- `config/hubfly-files.env.example`
+- `install.sh`
