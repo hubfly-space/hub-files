@@ -34,7 +34,7 @@ Runtime configuration is controlled by flags or environment variables.
 | Management port | `-mgmt-port` | `HUBFLY_MGMT_PORT` | `10014` |
 | Demo directory | `-demo-dir` | `HUBFLY_DEMO_DIR` | `./demo` |
 | Built UI directory | `-ui-dir` | `HUBFLY_UI_DIR` | `./frontend/dist` |
-| Maximum upload bytes | `-max-upload-bytes` | `HUBFLY_MAX_UPLOAD_BYTES` | `107374182400` |
+| Maximum upload bytes | `-max-upload-bytes` | `HUBFLY_MAX_UPLOAD_BYTES` | `104857600` |
 
 ## Base URLs
 
@@ -132,7 +132,7 @@ The server enforces these request size limits:
 | Limit | Value | Applies to |
 | --- | --- | --- |
 | JSON body limit | `1 MiB` | `/api/mkdir`, `/api/rename`, `/api/delete`, `/api/zip`, `/api/extract` |
-| Upload body limit | `100 GiB` by default, configurable with `HUBFLY_MAX_UPLOAD_BYTES`; `0` disables the cap | `/api/upload` |
+| Upload body limit | `100 MiB` by default, configurable with `HUBFLY_MAX_UPLOAD_BYTES`; `0` disables the cap | `/api/upload` |
 
 Notes:
 
@@ -486,7 +486,7 @@ Body:
 
 ### Size limits
 
-- maximum upload request size: `100 GiB` by default
+- maximum upload request size: `100 MiB` by default
 - set `HUBFLY_MAX_UPLOAD_BYTES=0` or `-max-upload-bytes=0` to disable the application-level upload cap
 
 ### Ownership behavior

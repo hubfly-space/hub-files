@@ -54,7 +54,7 @@ Then run the Go server from the repository root:
 go run ./cmd/hubfly-files
 ```
 
-The server reads built UI assets from `./frontend/dist` by default. Override that path with `HUBFLY_UI_DIR` or `-ui-dir`. Uploads are capped at `100 GiB` by default; adjust with `HUBFLY_MAX_UPLOAD_BYTES` or `-max-upload-bytes`.
+The server reads built UI assets from `./frontend/dist` by default. Override that path with `HUBFLY_UI_DIR` or `-ui-dir`. Uploads are capped at `100 MiB` by default; adjust with `HUBFLY_MAX_UPLOAD_BYTES` or `-max-upload-bytes`.
 
 ## API documentation
 
