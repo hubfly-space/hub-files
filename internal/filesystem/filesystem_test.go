@@ -83,6 +83,31 @@ func TestSafePath(t *testing.T) {
 	}
 }
 
+func TestSafePathRejectsSiblingWithSharedPrefix(t *testing.T) {
+	parent, err := os.MkdirTemp("", "test-safepath-prefix-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(parent)
+
+	root := filepath.Join(parent, "root")
+	sibling := filepath.Join(parent, "root-sibling")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(sibling, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sibling, "evil.txt"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = SafePath(root, "../root-sibling/evil.txt")
+	if err == nil {
+		t.Fatal("SafePath() expected shared-prefix sibling to be rejected")
+	}
+}
+
 func TestSafePathSymlink(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "test-symlink-*")
 	if err != nil {
@@ -109,6 +134,45 @@ func TestSafePathSymlink(t *testing.T) {
 	// The result depends on whether the symlink target is within root
 	// We mainly want to ensure it doesn't panic
 	t.Logf("SafePath with symlink returned: %v", err)
+}
+
+func TestWriteFileAtomicKeepsExistingTargetOnReadError(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "test-atomic-write-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "target.txt"), []byte("original"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = WriteFileAtomic(tmpDir, "target.txt", failingReader{})
+	if err == nil {
+		t.Fatal("WriteFileAtomic() expected error")
+	}
+
+	content, err := os.ReadFile(filepath.Join(tmpDir, "target.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "original" {
+		t.Fatalf("target content = %q, want %q", string(content), "original")
+	}
+
+	matches, err := filepath.Glob(filepath.Join(tmpDir, ".*.upload"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("temporary upload files left behind: %v", matches)
+	}
+}
+
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) {
+	return 0, os.ErrPermission
 }
 
 func TestListDir(t *testing.T) {

@@ -17,8 +17,6 @@ import (
 )
 
 const (
-	// MaxUploadSize is the maximum allowed upload size (10 MB)
-	MaxUploadSize = 10 << 20
 	// MaxRequestSize is the maximum allowed request body size (1 MB for JSON)
 	MaxRequestSize = 1 << 20
 	// Demo storage values exposed in demo mode.
@@ -83,6 +81,22 @@ func writeFileSystemError(w http.ResponseWriter, err error) {
 	}
 }
 
+func writeUploadError(w http.ResponseWriter, err error) {
+	var maxBytesErr *http.MaxBytesError
+	switch {
+	case errors.As(err, &maxBytesErr):
+		http.Error(w, "File too large", http.StatusRequestEntityTooLarge)
+	case errors.Is(err, filesystem.ErrUnauthorized):
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+	case errors.Is(err, os.ErrNotExist):
+		http.Error(w, "Not found", http.StatusNotFound)
+	case errors.Is(err, os.ErrPermission):
+		http.Error(w, "Permission denied", http.StatusForbidden)
+	default:
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 func writeArchiveError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, archive.ErrIllegalArchivePath), errors.Is(err, archive.ErrArchiveSymlink):
@@ -96,6 +110,15 @@ func writeArchiveError(w http.ResponseWriter, err error) {
 	default:
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+func validUploadFilename(name string) bool {
+	return name != "" &&
+		name != "." &&
+		name != ".." &&
+		!filepath.IsAbs(name) &&
+		!strings.ContainsAny(name, `/\`) &&
+		!strings.ContainsRune(name, 0)
 }
 
 // Middleware to validate session
@@ -260,33 +283,89 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Limit request body size for uploads
-	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
-
 	root := r.Header.Get("X-Session-Root")
-	path := r.FormValue("path")
+	maxUploadBytes := s.Config.MaxUploadBytes
+	if maxUploadBytes > 0 {
+		if r.ContentLength > maxUploadBytes {
+			http.Error(w, "File too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	}
 
-	// Parse multipart form with size limit
-	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
-		http.Error(w, "File too large (max 10MB)", http.StatusRequestEntityTooLarge)
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		s.handleMultipartUpload(w, r, root)
 		return
 	}
 
-	file, header, err := r.FormFile("file")
+	dirPath := r.URL.Query().Get("path")
+	filename := r.URL.Query().Get("filename")
+	if !validUploadFilename(filename) {
+		http.Error(w, "Invalid file name", http.StatusBadRequest)
+		return
+	}
+
+	finalPath := filepath.Join(dirPath, filename)
+	if err := filesystem.WriteFileAtomic(root, finalPath, r.Body); err != nil {
+		log.Printf("Upload error: %v", err)
+		writeUploadError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleMultipartUpload(w http.ResponseWriter, r *http.Request, root string) {
+	reader, err := r.MultipartReader()
 	if err != nil {
 		http.Error(w, "Invalid file upload", http.StatusBadRequest)
 		return
 	}
-	defer file.Close()
 
-	finalPath := filepath.Join(path, header.Filename)
-	err = filesystem.WriteFile(root, finalPath, file)
-	if err != nil {
-		log.Printf("Upload error: %v", err)
-		writeFileSystemError(w, err)
-		return
+	dirPath := r.URL.Query().Get("path")
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			writeUploadError(w, err)
+			return
+		}
+
+		switch part.FormName() {
+		case "path":
+			if dirPath == "" {
+				pathBytes, err := io.ReadAll(io.LimitReader(part, MaxRequestSize+1))
+				if err != nil {
+					writeUploadError(w, err)
+					return
+				}
+				if len(pathBytes) > MaxRequestSize {
+					http.Error(w, "Invalid path", http.StatusBadRequest)
+					return
+				}
+				dirPath = string(pathBytes)
+			}
+		case "file":
+			filename := part.FileName()
+			if !validUploadFilename(filename) {
+				http.Error(w, "Invalid file name", http.StatusBadRequest)
+				return
+			}
+
+			finalPath := filepath.Join(dirPath, filename)
+			if err := filesystem.WriteFileAtomic(root, finalPath, part); err != nil {
+				log.Printf("Upload error: %v", err)
+				writeUploadError(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 	}
-	w.WriteHeader(http.StatusOK)
+
+	http.Error(w, "Invalid file upload", http.StatusBadRequest)
 }
 
 func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {

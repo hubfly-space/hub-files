@@ -33,19 +33,29 @@ type Ownership struct {
 	GID int
 }
 
+func pathWithinRoot(root, target string) bool {
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+}
+
 func SafePath(root, subPath string) (string, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return "", err
 	}
+	absRoot = filepath.Clean(absRoot)
 
 	finalPath := filepath.Join(absRoot, filepath.FromSlash(subPath))
 	absFinal, err := filepath.Abs(finalPath)
 	if err != nil {
 		return "", err
 	}
+	absFinal = filepath.Clean(absFinal)
 
-	if !strings.HasPrefix(absFinal, absRoot) {
+	if !pathWithinRoot(absRoot, absFinal) {
 		return "", ErrUnauthorized
 	}
 
@@ -58,13 +68,13 @@ func SafePath(root, subPath string) (string, error) {
 		if err2 != nil {
 			return "", ErrUnauthorized
 		}
-		if !strings.HasPrefix(resolvedParent, absRoot) {
+		if !pathWithinRoot(absRoot, filepath.Clean(resolvedParent)) {
 			return "", ErrUnauthorized
 		}
 		return absFinal, nil
 	}
 
-	if !strings.HasPrefix(resolved, absRoot) {
+	if !pathWithinRoot(absRoot, filepath.Clean(resolved)) {
 		return "", ErrUnauthorized
 	}
 
@@ -262,6 +272,62 @@ func WriteFile(root, subPath string, data io.Reader) error {
 
 	_, err = io.Copy(f, data)
 	return err
+}
+
+func WriteFileAtomic(root, subPath string, data io.Reader) error {
+	path, err := SafePath(root, subPath)
+	if err != nil {
+		return err
+	}
+
+	ownership, err := DesiredOwnershipForPath(path)
+	if err != nil {
+		return err
+	}
+
+	mode := os.FileMode(0644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	tmp, err := os.CreateTemp(dir, "."+base+".*.upload")
+	if err != nil {
+		return err
+	}
+
+	tmpPath := tmp.Name()
+	keepTemp := false
+	defer func() {
+		if !keepTemp {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	buf := make([]byte, 1024*1024)
+	if _, err := io.CopyBuffer(tmp, data, buf); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := ApplyOwnership(tmpPath, ownership); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+
+	keepTemp = true
+	return nil
 }
 
 func DeleteFile(root, subPath string) error {
