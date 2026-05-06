@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { HelpCircle, AlertCircle, Loader2 } from "lucide-react";
+import { HelpCircle, AlertCircle, Loader2, FolderOpen, Upload, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function App() {
@@ -233,97 +233,94 @@ function App() {
   };
 
   return (
-    <div className="fixed inset-0 bg-background flex flex-col">
-      <div className="w-full h-full flex flex-col overflow-hidden bg-background">
+    <div className="fixed inset-0 bg-background flex flex-col selection:bg-primary/10">
+      <div className="w-full h-full flex flex-col overflow-hidden">
         {!openFile && (
-          <div className="shrink-0 border-b border-border/50 bg-background/80 backdrop-blur-xl sticky top-0 z-30">
-            <div className="flex flex-col gap-4 px-6 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center text-background font-bold text-sm">
-                    H
-                  </div>
-                  <h1 className="text-lg font-semibold tracking-tight">
-                    HubFly{" "}
-                    <span className="text-muted-foreground font-normal">
-                      Files
-                    </span>
-                  </h1>
-                </div>
-                <Breadcrumb path={path} onNavigate={navigate} />
-              </div>
-              {storage && (
-                <div className="rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                        Mounted volume
-                      </p>
-                      <p className="mt-1 text-sm text-foreground">
-                        {formatBytes(storage.totalBytes)} total
-                        <span className="text-muted-foreground"> • </span>
-                        {formatBytes(storage.usedBytes)} used
-                        <span className="text-muted-foreground"> • </span>
-                        {formatBytes(storage.availableBytes)} free
+          <header className="shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-xl z-30 px-6 py-4">
+            <div className="flex flex-col gap-5 max-w-[1600px] mx-auto w-full">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/20">
+                      <FolderOpen className="w-5 h-5" />
+                    </div>
+                    <div className="hidden sm:block">
+                      <h1 className="text-base font-bold tracking-tight leading-none">
+                        HubFly
+                      </h1>
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground mt-1 font-semibold">
+                        Files Manager
                       </p>
                     </div>
-                    <div className="min-w-[7rem] text-right">
-                      <p className="text-2xl font-semibold tracking-tight">
-                        {storage.usedPercent.toFixed(1)}%
-                      </p>
-                      <p className="text-xs text-muted-foreground">used</p>
-                    </div>
                   </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-border/70">
-                    <div
-                      className="h-full rounded-full bg-foreground transition-[width] duration-300"
-                      style={{
-                        width: `${Math.max(0, Math.min(storage.usedPercent, 100))}%`,
-                      }}
-                    />
-                  </div>
+                  <div className="h-6 w-px bg-border/60 mx-1 hidden md:block" />
+                  <Breadcrumb path={path} onNavigate={navigate} />
                 </div>
-              )}
-            </div>
 
-            <Toolbar
-              viewMode={viewMode}
-              onViewToggle={() =>
-                setViewMode(viewMode === "list" ? "grid" : "list")
-              }
-              onRefresh={refresh}
-              onUpload={handleUploadClick}
-              onNewFolder={() => setNewFolderDialog({ open: true, name: "" })}
-              search={search}
-              onSearchChange={setSearch}
-              selectionMode={selectionMode}
-              onSelectionModeToggle={() => {
-                setSelectionMode(!selectionMode);
-                if (selectionMode) setSelectedItems(new Set());
-              }}
-              selectedCount={selectedItems.size}
-              onBulkDelete={() =>
-                setDeleteConfirm({
-                  open: true,
-                  names: Array.from(selectedItems),
-                })
-              }
-              onBulkZip={handleBulkZip}
-              onClearSelection={() => setSelectedItems(new Set())}
-            />
+                {storage && (
+                  <div className="hidden lg:flex items-center gap-4 bg-secondary/40 px-3 py-1.5 rounded-full border border-border/50">
+                    <div className="flex flex-col items-end">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Storage</span>
+                        <span className="text-xs font-semibold">{storage.usedPercent.toFixed(0)}%</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-medium">
+                        {formatBytes(storage.usedBytes)} of {formatBytes(storage.totalBytes)}
+                      </p>
+                    </div>
+                    <div className="w-20 h-1.5 rounded-full bg-border/50 overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${storage.usedPercent}%` }}
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          storage.usedPercent > 90 ? "bg-destructive" : "bg-primary"
+                        )}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Toolbar
+                viewMode={viewMode}
+                onViewToggle={() =>
+                  setViewMode(viewMode === "list" ? "grid" : "list")
+                }
+                onRefresh={refresh}
+                onUpload={handleUploadClick}
+                onNewFolder={() => setNewFolderDialog({ open: true, name: "" })}
+                search={search}
+                onSearchChange={setSearch}
+                selectionMode={selectionMode}
+                onSelectionModeToggle={() => {
+                  setSelectionMode(!selectionMode);
+                  if (selectionMode) setSelectedItems(new Set());
+                }}
+                selectedCount={selectedItems.size}
+                onBulkDelete={() =>
+                  setDeleteConfirm({
+                    open: true,
+                    names: Array.from(selectedItems),
+                  })
+                }
+                onBulkZip={handleBulkZip}
+                onClearSelection={() => setSelectedItems(new Set())}
+              />
+            </div>
             <input
               type="file"
               ref={fileInputRef}
               style={{ display: "none" }}
               onChange={handleFileChange}
             />
-          </div>
+          </header>
         )}
 
-        <div
+        <main
           className={cn(
             "flex-1 min-h-0 relative",
-            isDragging && "bg-secondary/50",
+            isDragging && "bg-primary/5 ring-2 ring-primary/20 ring-inset",
           )}
           onDragOver={(e) => {
             e.preventDefault();
@@ -334,133 +331,149 @@ function App() {
           onClick={() => setSelectedItems(new Set())}
         >
           {isDragging && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/40 backdrop-blur-[2px]">
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="text-center space-y-2"
+                className="bg-background border-2 border-dashed border-primary/30 p-10 rounded-[2rem] shadow-2xl flex flex-col items-center gap-4"
               >
-                <div className="w-16 h-16 border-2 border-dashed border-muted-foreground/30 rounded-2xl flex items-center justify-center mx-auto">
-                  <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-primary">
+                  <Upload className="w-8 h-8 animate-bounce" />
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Drop file to upload
-                </p>
+                <div className="text-center">
+                  <p className="text-lg font-bold">Ready to upload</p>
+                  <p className="text-sm text-muted-foreground">Drop your files here to start</p>
+                </div>
               </motion.div>
             </div>
           )}
 
           {openFile ? (
-            <div className="h-full p-6">
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="h-full p-6 max-w-[1600px] mx-auto w-full"
+            >
               <FileViewer
                 path={openFile.path}
                 name={openFile.name}
                 onClose={() => setOpenFile(null)}
               />
-            </div>
+            </motion.div>
           ) : (
-            <div className="h-full overflow-y-auto no-scrollbar p-6">
-              <AnimatePresence mode="wait">
-                {loading ? (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="h-full flex items-center justify-center"
-                  >
-                    <div className="flex flex-col items-center gap-4">
-                      <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">
-                        Loading...
-                      </span>
-                    </div>
-                  </motion.div>
-                ) : error ? (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="h-full flex flex-col items-center justify-center gap-4"
-                  >
-                    <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center">
-                      <AlertCircle className="w-8 h-8 text-destructive" />
-                    </div>
-                    <div className="text-center space-y-1">
-                      <h3 className="text-lg font-semibold">Access Denied</h3>
-                      <p className="text-sm text-muted-foreground max-w-sm">
-                        {error}
+            <div className="h-full overflow-y-auto no-scrollbar scroll-smooth">
+              <div className="p-6 max-w-[1600px] mx-auto w-full min-h-full flex flex-col">
+                <AnimatePresence mode="wait">
+                  {loading ? (
+                    <motion.div
+                      key="loading"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex-1 flex flex-col items-center justify-center gap-4"
+                    >
+                      <div className="relative">
+                        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                        <div className="absolute inset-0 blur-xl bg-primary/20 animate-pulse" />
+                      </div>
+                      <p className="text-sm font-medium text-muted-foreground animate-pulse">
+                        Scanning filesystem...
                       </p>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={refresh}>
-                      Try Again
-                    </Button>
-                  </motion.div>
-                ) : filteredFiles.length === 0 ? (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="h-full flex flex-col items-center justify-center gap-4"
-                  >
-                    <HelpCircle className="w-12 h-12 text-muted-foreground/30" />
-                    <div className="text-center">
-                      <p className="text-sm font-medium text-muted-foreground">
-                        {search ? "No matches found" : "This folder is empty"}
-                      </p>
-                      <p className="text-xs text-muted-foreground/60 mt-1">
-                        {search
-                          ? "Try a different search"
-                          : "Upload a file to get started"}
-                      </p>
-                    </div>
-                  </motion.div>
-                ) : (
-                  <div
-                    className={cn(
-                      viewMode === "list" ? "space-y-1" : "file-grid-layout",
-                    )}
-                  >
-                    {filteredFiles.map((file) => (
-                      <FileItem
-                        key={file.name}
-                        file={file}
-                        viewMode={viewMode}
-                        isSelected={selectedItems.has(file.name)}
-                        selectionMode={selectionMode}
-                        onNavigate={handleNavigate}
-                        onSelect={handleSelect}
-                        onDelete={(name) =>
-                          setDeleteConfirm({ open: true, names: [name] })
-                        }
-                        onRename={(name) =>
-                          setRenameDialog({
-                            open: true,
-                            oldName: name,
-                            newName: name,
-                          })
-                        }
-                        onZip={(name) => {
-                          zipItem(name);
-                          toast({
-                            title: "Archiving",
-                            description: `Zipping ${name}...`,
-                          });
-                        }}
-                        onExtract={(name) => {
-                          extractItem(name);
-                          toast({
-                            title: "Extracting",
-                            description: `Extracting ${name}...`,
-                          });
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </AnimatePresence>
+                    </motion.div>
+                  ) : error ? (
+                    <motion.div
+                      key="error"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex-1 flex flex-col items-center justify-center gap-6"
+                    >
+                      <div className="w-20 h-20 rounded-3xl bg-destructive/10 flex items-center justify-center shadow-inner">
+                        <AlertCircle className="w-10 h-10 text-destructive" />
+                      </div>
+                      <div className="text-center space-y-2">
+                        <h3 className="text-xl font-bold tracking-tight">Access Denied</h3>
+                        <p className="text-sm text-muted-foreground max-w-xs mx-auto leading-relaxed">
+                          {error}
+                        </p>
+                      </div>
+                      <Button variant="secondary" className="rounded-xl px-8" onClick={refresh}>
+                        Try Again
+                      </Button>
+                    </motion.div>
+                  ) : filteredFiles.length === 0 ? (
+                    <motion.div
+                      key="empty"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex-1 flex flex-col items-center justify-center gap-6 opacity-60"
+                    >
+                      <div className="w-20 h-20 rounded-full bg-secondary/50 flex items-center justify-center">
+                        <Search className="w-10 h-10 text-muted-foreground/40" />
+                      </div>
+                      <div className="text-center space-y-2">
+                        <p className="text-lg font-bold text-muted-foreground">
+                          {search ? "No matches found" : "Empty Space"}
+                        </p>
+                        <p className="text-sm text-muted-foreground/60 max-w-[200px] mx-auto">
+                          {search
+                            ? "Try refining your search terms"
+                            : "Nothing here yet. Drag and drop to upload."}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="content"
+                      layout
+                      className={cn(
+                        "flex-1",
+                        viewMode === "list" ? "space-y-1.5" : "file-grid-layout",
+                      )}
+                    >
+                      {filteredFiles.map((file, index) => (
+                        <FileItem
+                          key={file.name}
+                          file={file}
+                          viewMode={viewMode}
+                          isSelected={selectedItems.has(file.name)}
+                          selectionMode={selectionMode}
+                          onNavigate={handleNavigate}
+                          onSelect={handleSelect}
+                          onDelete={(name) =>
+                            setDeleteConfirm({ open: true, names: [name] })
+                          }
+                          onRename={(name) =>
+                            setRenameDialog({
+                              open: true,
+                              oldName: name,
+                              newName: name,
+                            })
+                          }
+                          onZip={(name) => {
+                            zipItem(name);
+                            toast({
+                              title: "Archiving",
+                              description: `Zipping ${name}...`,
+                            });
+                          }}
+                          onExtract={(name) => {
+                            extractItem(name);
+                            toast({
+                              title: "Extracting",
+                              description: `Extracting ${name}...`,
+                            });
+                          }}
+                        />
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           )}
-        </div>
+        </main>
       </div>
 
       <Dialog

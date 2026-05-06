@@ -8,7 +8,9 @@ import {
   Box,
   ExternalLink,
   CheckCircle2,
-  Circle
+  Circle,
+  Calendar,
+  HardDrive
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -19,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 
 interface FileItemProps {
   file: FileInfo;
@@ -78,38 +81,56 @@ export const FileItem: React.FC<FileItemProps> = ({
 
   if (viewMode === 'grid') {
     return (
-      <div
+      <motion.div
+        layout
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        whileHover={{ y: -4 }}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         className={cn(
-          "group relative flex flex-col items-center gap-3 p-4 rounded-xl border transition-all cursor-pointer select-none",
+          "group relative flex flex-col items-center gap-3 p-5 rounded-2xl border transition-all cursor-pointer select-none",
           isSelected
-            ? "bg-secondary border-foreground/20"
-            : "border-transparent hover:bg-secondary/50 hover:border-border"
+            ? "bg-primary/5 border-primary/30 shadow-md ring-1 ring-primary/20"
+            : "bg-card border-border/50 hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5"
         )}
       >
         <div className={cn(
-          "p-3 rounded-lg transition-colors relative",
-          isSelected ? "bg-background" : "bg-secondary/70 group-hover:bg-secondary"
+          "w-14 h-14 rounded-2xl transition-all flex items-center justify-center relative",
+          isSelected ? "bg-primary/10" : "bg-secondary/50 group-hover:bg-primary/5"
         )}>
-          <FileIcon isDir={file.isDir} name={file.name} className="w-10 h-10 text-foreground/80" />
+          <FileIcon isDir={file.isDir} name={file.name} className={cn(
+            "w-8 h-8 transition-transform group-hover:scale-110 duration-300",
+            isSelected ? "text-primary" : "text-foreground/70"
+          )} />
 
           {(selectionMode || isSelected) && (
-            <div className="absolute -top-1 -right-1">
+            <div className="absolute -top-1.5 -right-1.5">
               {isSelected ? (
-                <CheckCircle2 className="w-5 h-5 text-foreground fill-background" />
+                <div className="bg-primary rounded-full p-0.5 shadow-lg shadow-primary/30">
+                  <CheckCircle2 className="w-5 h-5 text-primary-foreground fill-primary" />
+                </div>
               ) : (
-                <Circle className="w-5 h-5 text-muted-foreground/40 fill-background" />
+                <div className="bg-background rounded-full p-0.5 border-2 border-muted-foreground/20">
+                  <Circle className="w-4 h-4 text-transparent" />
+                </div>
               )}
             </div>
           )}
         </div>
 
-        <span className="text-sm font-medium text-center truncate w-full">
-          {file.name}
-        </span>
+        <div className="flex flex-col items-center gap-0.5 w-full">
+          <span className="text-sm font-bold truncate w-full text-center px-1">
+            {file.name}
+          </span>
+          {!file.isDir && (
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-tight">
+              {formatSize(file.size)}
+            </span>
+          )}
+        </div>
 
-        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100" onClick={e => e.stopPropagation()}>
           <FileItemActions
             file={file}
             onDelete={onDelete}
@@ -118,52 +139,67 @@ export const FileItem: React.FC<FileItemProps> = ({
             onExtract={onExtract}
           />
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       className={cn(
-        "group flex items-center justify-between p-2 px-3 rounded-lg transition-all cursor-pointer select-none",
+        "group flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer select-none border",
         isSelected
-          ? "bg-secondary"
-          : "hover:bg-secondary/50"
+          ? "bg-primary/5 border-primary/20 shadow-sm"
+          : "bg-transparent border-transparent hover:bg-secondary/40 hover:border-border/50"
       )}
     >
-      <div className="flex items-center gap-3 flex-1 min-w-0">
-        <div className="relative shrink-0">
-          <FileIcon isDir={file.isDir} name={file.name} className="w-5 h-5 text-muted-foreground" />
-          {selectionMode && (
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        <div className="relative shrink-0 w-10 h-10 rounded-lg bg-secondary/30 flex items-center justify-center group-hover:bg-secondary/50 transition-colors">
+          <FileIcon isDir={file.isDir} name={file.name} className={cn(
+            "w-5 h-5 transition-colors",
+            isSelected ? "text-primary" : "text-muted-foreground"
+          )} />
+          {(selectionMode || isSelected) && (
             <div className="absolute -top-1.5 -left-1.5">
               {isSelected ? (
-                <CheckCircle2 className="w-3.5 h-3.5 text-foreground fill-background" />
+                <CheckCircle2 className="w-4 h-4 text-primary fill-background" />
               ) : (
-                <Circle className="w-3.5 h-3.5 text-muted-foreground/30 fill-background" />
+                <Circle className="w-4 h-4 text-muted-foreground/20 fill-background" />
               )}
             </div>
           )}
         </div>
-        <span className="text-sm truncate">{file.name}</span>
-      </div>
-
-      <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
-        {!file.isDir && <span>{formatSize(file.size)}</span>}
-        <span className="hidden md:inline">{file.modTime}</span>
-
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-          <FileItemActions
-            file={file}
-            onDelete={onDelete}
-            onRename={onRename}
-            onZip={onZip}
-            onExtract={onExtract}
-          />
+        <div className="flex flex-col min-w-0">
+          <span className="text-sm font-semibold truncate group-hover:text-primary transition-colors">{file.name}</span>
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+            {!file.isDir && (
+              <span className="flex items-center gap-1">
+                <HardDrive className="w-3 h-3" />
+                {formatSize(file.size)}
+              </span>
+            )}
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              {file.modTime}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+
+      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+        <FileItemActions
+          file={file}
+          onDelete={onDelete}
+          onRename={onRename}
+          onZip={onZip}
+          onExtract={onExtract}
+        />
+      </div>
+    </motion.div>
   );
 };
 
