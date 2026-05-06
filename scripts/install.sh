@@ -135,10 +135,26 @@ trap 'rm -rf "${TMP_DIR}"' EXIT
 curl -fsSL "${BASE_URL}/${ARCHIVE_NAME}" -o "${TMP_DIR}/${ARCHIVE_NAME}"
 curl -fsSL "${BASE_URL}/${CHECKSUMS_NAME}" -o "${TMP_DIR}/${CHECKSUMS_NAME}"
 
-(
-  cd "${TMP_DIR}"
-  grep " ${ARCHIVE_NAME}$" "${CHECKSUMS_NAME}" | sha256sum -c -
-)
+EXPECTED_SUM="$(
+  awk -v archive="${ARCHIVE_NAME}" '
+    $1 ~ /^[0-9a-fA-F]{64}$/ && ($NF == archive || $NF ~ ("/" archive "$")) {
+      print $1
+      exit
+    }
+  ' "${TMP_DIR}/${CHECKSUMS_NAME}"
+)"
+
+if [[ -z "${EXPECTED_SUM}" ]]; then
+  echo "failed to find checksum for ${ARCHIVE_NAME} in ${CHECKSUMS_NAME}" >&2
+  exit 1
+fi
+
+ACTUAL_SUM="$(sha256sum "${TMP_DIR}/${ARCHIVE_NAME}" | awk '{print $1}')"
+
+if [[ "${EXPECTED_SUM}" != "${ACTUAL_SUM}" ]]; then
+  echo "checksum verification failed for ${ARCHIVE_NAME}" >&2
+  exit 1
+fi
 
 tar -xzf "${TMP_DIR}/${ARCHIVE_NAME}" -C "${TMP_DIR}"
 PACKAGE_DIR="${TMP_DIR}/${ASSET_BASENAME}"

@@ -43,4 +43,7 @@ cp "${ROOT_DIR}/scripts/install.sh" "${PACKAGE_DIR}/"
 cp "${ROOT_DIR}/README.md" "${PACKAGE_DIR}/README.md"
 
 tar -C "${OUT_DIR}" -czf "${ARCHIVE_PATH}" "${ASSET_BASENAME}"
-sha256sum "${ARCHIVE_PATH}" > "${ARCHIVE_PATH}.sha256"
+(
+  cd "${OUT_DIR}"
+  sha256sum "${ASSET_BASENAME}.tar.gz" > "${ASSET_BASENAME}.tar.gz.sha256"
+)
