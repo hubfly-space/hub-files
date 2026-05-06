@@ -8,6 +8,14 @@ export interface FileInfo {
   modTime: string;
 }
 
+export interface StorageInfo {
+  path: string;
+  totalBytes: number;
+  usedBytes: number;
+  availableBytes: number;
+  usedPercent: number;
+}
+
 export const api = {
   getToken: () => {
     const params = new URLSearchParams(window.location.search);
@@ -21,6 +29,14 @@ export const api = {
 
   list: async (path: string): Promise<FileInfo[]> => {
     const res = await fetch(`${API_BASE}/list?path=${encodeURIComponent(path)}`, {
+      headers: api.headers(),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  storage: async (path: string): Promise<StorageInfo> => {
+    const res = await fetch(`${API_BASE}/storage?path=${encodeURIComponent(path)}`, {
       headers: api.headers(),
     });
     if (!res.ok) throw new Error(await res.text());
