@@ -18,6 +18,5 @@ frontend/node_modules/
 frontend/dist/
 package-lock.json
 bun.lockb
-!frontend/package-lock.json
 
 sec.md
