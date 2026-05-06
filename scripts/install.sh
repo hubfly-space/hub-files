@@ -184,6 +184,9 @@ else
   if ! ${SUDO} grep -q '^HUBFLY_DEMO_DIR=' "${ENV_FILE}"; then
     echo "HUBFLY_DEMO_DIR=${INSTALL_ROOT}/demo" | ${SUDO} tee -a "${ENV_FILE}" >/dev/null
   fi
+  if ! ${SUDO} grep -q '^HUBFLY_MAX_UPLOAD_BYTES=' "${ENV_FILE}"; then
+    echo "HUBFLY_MAX_UPLOAD_BYTES=104857600" | ${SUDO} tee -a "${ENV_FILE}" >/dev/null
+  fi
 fi
 
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
