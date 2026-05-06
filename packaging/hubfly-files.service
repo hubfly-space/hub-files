@@ -1,0 +1,15 @@
+[Unit]
+Description=HubFly Files
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/hubfly-files/hubfly-files.env
+WorkingDirectory=/opt/hubfly-files
+ExecStart=/usr/local/bin/hubfly-files
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
