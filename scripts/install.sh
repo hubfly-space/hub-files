@@ -166,6 +166,7 @@ fi
 
 ${SUDO} install -d "${BIN_DIR}" "${INSTALL_ROOT}" "${CONFIG_DIR}" "${INSTALL_ROOT}/demo"
 ${SUDO} install -m 0755 "${PACKAGE_DIR}/bin/hubfly-files" "${BIN_DIR}/hubfly-files"
+${SUDO} install -m 0644 "${PACKAGE_DIR}/demo/README.md" "${INSTALL_ROOT}/demo/README.md"
 
 ${SUDO} rm -rf "${INSTALL_ROOT}/web.tmp"
 ${SUDO} mkdir -p "${INSTALL_ROOT}/web.tmp"

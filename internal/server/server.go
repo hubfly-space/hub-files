@@ -21,6 +21,9 @@ const (
 	MaxUploadSize = 10 << 20
 	// MaxRequestSize is the maximum allowed request body size (1 MB for JSON)
 	MaxRequestSize = 1 << 20
+	// Demo storage values exposed in demo mode.
+	DemoTotalBytes = 20 << 20
+	DemoUsedBytes  = 5 << 20
 )
 
 type Server struct {
@@ -124,6 +127,7 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				}
 				// Ensure demo dir exists
 				os.MkdirAll(s.Config.DemoDir, 0755)
+				r.Header.Set("X-Session-Demo", "true")
 			} else {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
@@ -196,6 +200,18 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	root := r.Header.Get("X-Session-Root")
 	path := r.URL.Query().Get("path")
+
+	if r.Header.Get("X-Session-Demo") == "true" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(&filesystem.StorageInfo{
+			Path:           root,
+			TotalBytes:     DemoTotalBytes,
+			UsedBytes:      DemoUsedBytes,
+			AvailableBytes: DemoTotalBytes - DemoUsedBytes,
+			UsedPercent:    (float64(DemoUsedBytes) / float64(DemoTotalBytes)) * 100,
+		})
+		return
+	}
 
 	storage, err := filesystem.GetStorageInfo(root, path)
 	if err != nil {

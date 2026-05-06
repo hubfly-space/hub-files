@@ -27,7 +27,7 @@ if [[ ! -f "${FRONTEND_DIST_DIR}/index.html" ]]; then
 fi
 
 rm -rf "${PACKAGE_DIR}"
-mkdir -p "${PACKAGE_DIR}/bin" "${PACKAGE_DIR}/web" "${PACKAGE_DIR}/systemd" "${PACKAGE_DIR}/config"
+mkdir -p "${PACKAGE_DIR}/bin" "${PACKAGE_DIR}/web" "${PACKAGE_DIR}/systemd" "${PACKAGE_DIR}/config" "${PACKAGE_DIR}/demo"
 
 CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
   go build \
@@ -39,6 +39,7 @@ CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
 cp -R "${FRONTEND_DIST_DIR}/." "${PACKAGE_DIR}/web/"
 cp "${ROOT_DIR}/packaging/hubfly-files.service" "${PACKAGE_DIR}/systemd/"
 cp "${ROOT_DIR}/packaging/hubfly-files.env.example" "${PACKAGE_DIR}/config/"
+cp "${ROOT_DIR}/demo/README.md" "${PACKAGE_DIR}/demo/README.md"
 cp "${ROOT_DIR}/scripts/install.sh" "${PACKAGE_DIR}/"
 cp "${ROOT_DIR}/README.md" "${PACKAGE_DIR}/README.md"
 

@@ -74,6 +74,8 @@ If no valid session is found:
 - demo mode is always read-only
 - demo mode disables upload, edit, and delete operations
 - the configured demo directory is created automatically if needed
+- `GET /api/storage` returns a fixed fake volume in demo mode:
+  `20 MiB` total, `5 MiB` used, `15 MiB` available
 
 Demo mode permissions:
 

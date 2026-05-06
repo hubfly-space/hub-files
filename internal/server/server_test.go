@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"hubfly-files/internal/config"
+	"hubfly-files/internal/filesystem"
 	"hubfly-files/internal/sessions"
 	"net/http"
 	"net/http/httptest"
@@ -110,5 +111,36 @@ func TestCreateSessionReturnsRateLimitExceeded(t *testing.T) {
 
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusTooManyRequests)
+	}
+}
+
+func TestDemoStorageReturnsFakeValues(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/storage?path=/", nil)
+	rec := httptest.NewRecorder()
+
+	srv.SetupRoutes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var storage filesystem.StorageInfo
+	if err := json.NewDecoder(rec.Body).Decode(&storage); err != nil {
+		t.Fatalf("decode error = %v", err)
+	}
+
+	if storage.TotalBytes != DemoTotalBytes {
+		t.Fatalf("totalBytes = %d, want %d", storage.TotalBytes, DemoTotalBytes)
+	}
+	if storage.UsedBytes != DemoUsedBytes {
+		t.Fatalf("usedBytes = %d, want %d", storage.UsedBytes, DemoUsedBytes)
+	}
+	if storage.AvailableBytes != DemoTotalBytes-DemoUsedBytes {
+		t.Fatalf("availableBytes = %d, want %d", storage.AvailableBytes, DemoTotalBytes-DemoUsedBytes)
+	}
+	if storage.UsedPercent != 25 {
+		t.Fatalf("usedPercent = %v, want 25", storage.UsedPercent)
 	}
 }
