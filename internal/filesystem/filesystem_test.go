@@ -176,6 +176,29 @@ func TestWriteAndReadFile(t *testing.T) {
 	}
 }
 
+func TestGetStorageInfo(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "test-storage-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	info, err := GetStorageInfo(tmpDir, "")
+	if err != nil {
+		t.Fatalf("GetStorageInfo() error = %v", err)
+	}
+
+	if info.Path == "" {
+		t.Fatal("GetStorageInfo() returned empty path")
+	}
+	if info.TotalBytes == 0 {
+		t.Fatal("GetStorageInfo() returned zero total bytes")
+	}
+	if info.UsedPercent < 0 || info.UsedPercent > 100 {
+		t.Fatalf("GetStorageInfo() returned invalid used percent: %f", info.UsedPercent)
+	}
+}
+
 func TestDeleteFile(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "test-delete-*")
 	if err != nil {

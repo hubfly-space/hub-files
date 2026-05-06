@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 var (
@@ -17,6 +18,14 @@ type FileInfo struct {
 	IsDir   bool   `json:"isDir"`
 	Size    int64  `json:"size"`
 	ModTime string `json:"modTime"`
+}
+
+type StorageInfo struct {
+	Path           string  `json:"path"`
+	TotalBytes     uint64  `json:"totalBytes"`
+	UsedBytes      uint64  `json:"usedBytes"`
+	AvailableBytes uint64  `json:"availableBytes"`
+	UsedPercent    float64 `json:"usedPercent"`
 }
 
 func SafePath(root, subPath string) (string, error) {
@@ -83,6 +92,36 @@ func ListDir(root, subPath string) ([]FileInfo, error) {
 	}
 
 	return files, nil
+}
+
+func GetStorageInfo(root, subPath string) (*StorageInfo, error) {
+	path, err := SafePath(root, subPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var stats syscall.Statfs_t
+	if err := syscall.Statfs(path, &stats); err != nil {
+		return nil, err
+	}
+
+	blockSize := uint64(stats.Bsize)
+	total := stats.Blocks * blockSize
+	available := stats.Bavail * blockSize
+	used := (stats.Blocks - stats.Bfree) * blockSize
+
+	usedPercent := 0.0
+	if total > 0 {
+		usedPercent = (float64(used) / float64(total)) * 100
+	}
+
+	return &StorageInfo{
+		Path:           path,
+		TotalBytes:     total,
+		UsedBytes:      used,
+		AvailableBytes: available,
+		UsedPercent:    usedPercent,
+	}, nil
 }
 
 func ReadFile(root, subPath string) (io.ReadCloser, error) {

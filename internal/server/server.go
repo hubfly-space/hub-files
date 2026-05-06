@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -66,9 +67,9 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				session = &sessions.Session{
 					Root:        s.Config.DemoDir,
 					ReadOnly:    true,
-					AllowUpload:  false,
-					AllowEdit:    false,
-					AllowDelete:  false,
+					AllowUpload: false,
+					AllowEdit:   false,
+					AllowDelete: false,
 				}
 				// Ensure demo dir exists
 				os.MkdirAll(s.Config.DemoDir, 0755)
@@ -117,7 +118,7 @@ func (s *Server) checkPermission(w http.ResponseWriter, r *http.Request, permFla
 		http.Error(w, "Read-only session", http.StatusForbidden)
 		return false
 	}
-	
+
 	sessionPerm := r.Header.Get("X-Session-" + permFlag)
 	if sessionPerm == "false" {
 		http.Error(w, permFlag+" not allowed for this session", http.StatusForbidden)
@@ -139,6 +140,21 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(files)
+}
+
+func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
+	root := r.Header.Get("X-Session-Root")
+	path := r.URL.Query().Get("path")
+
+	storage, err := filesystem.GetStorageInfo(root, path)
+	if err != nil {
+		log.Printf("Storage error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(storage)
 }
 
 func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
@@ -211,7 +227,9 @@ func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	root := r.Header.Get("X-Session-Root")
-	var req struct{ Path string `json:"path"` }
+	var req struct {
+		Path string `json:"path"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -376,11 +394,46 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(session)
 }
 
+func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	uiDir := s.Config.UIDir
+	if uiDir == "" {
+		http.Error(w, "UI directory not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	cleanPath := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+	targetPath := filepath.Join(uiDir, filepath.FromSlash(cleanPath))
+	indexPath := filepath.Join(uiDir, "index.html")
+
+	if cleanPath == "" || cleanPath == "." {
+		http.ServeFile(w, r, indexPath)
+		return
+	}
+
+	info, err := os.Stat(targetPath)
+	if err == nil && !info.IsDir() {
+		http.ServeFile(w, r, targetPath)
+		return
+	}
+
+	http.ServeFile(w, r, indexPath)
+}
+
 func (s *Server) SetupRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// UI API
 	mux.HandleFunc("/api/list", s.authMiddleware(s.handleList))
+	mux.HandleFunc("/api/storage", s.authMiddleware(s.handleStorage))
 	mux.HandleFunc("/api/file", s.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			s.handleGetFile(w, r)
@@ -395,6 +448,7 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux.Handle("/api/delete", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleDelete)))
 	mux.Handle("/api/zip", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleZip)))
 	mux.Handle("/api/extract", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleExtract)))
+	mux.HandleFunc("/", s.handleUI)
 
 	return mux
 }
