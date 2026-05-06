@@ -2,6 +2,7 @@ package archive
 
 import (
 	"archive/zip"
+	"hubfly-files/internal/filesystem"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,7 +33,7 @@ func TestZipAndUnzip(t *testing.T) {
 
 	// Create zip
 	zipPath := filepath.Join(tmpDir, "test.zip")
-	err = Zip(sourceDir, zipPath)
+	err = Zip(sourceDir, zipPath, &filesystem.Ownership{})
 	if err != nil {
 		t.Fatalf("Zip() error = %v", err)
 	}
@@ -44,7 +45,7 @@ func TestZipAndUnzip(t *testing.T) {
 
 	// Extract zip
 	extractDir := filepath.Join(tmpDir, "extracted")
-	err = Unzip(zipPath, extractDir)
+	err = Unzip(zipPath, extractDir, &filesystem.Ownership{})
 	if err != nil {
 		t.Fatalf("Unzip() error = %v", err)
 	}
@@ -104,7 +105,7 @@ func TestZipSlipProtection(t *testing.T) {
 
 	// Try to unzip - should fail with illegal file path error
 	extractDir := filepath.Join(tmpDir, "extract")
-	err = Unzip(maliciousZip, extractDir)
+	err = Unzip(maliciousZip, extractDir, &filesystem.Ownership{})
 	if err == nil {
 		t.Error("Unzip() should fail for path traversal attempts")
 	}
@@ -141,7 +142,7 @@ func TestUnzipSymlinkRejection(t *testing.T) {
 
 	// Try to unzip - should fail because symlinks are rejected
 	extractDir := filepath.Join(tmpDir, "extract")
-	err = Unzip(symlinkZip, extractDir)
+	err = Unzip(symlinkZip, extractDir, &filesystem.Ownership{})
 	if err == nil {
 		t.Error("Unzip() should reject symlinks")
 	}

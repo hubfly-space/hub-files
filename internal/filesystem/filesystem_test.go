@@ -28,11 +28,11 @@ func TestSafePath(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		root      string
-		subPath   string
-		wantErr   bool
-		wantPath  string
+		name     string
+		root     string
+		subPath  string
+		wantErr  bool
+		wantPath string
 	}{
 		{
 			name:     "valid path within root",
@@ -45,13 +45,13 @@ func TestSafePath(t *testing.T) {
 			name:    "path traversal attack",
 			root:    tmpDir,
 			subPath: "..../.../etc/passwd",
-			wantErr:  true,
+			wantErr: true,
 		},
 		{
-			name:     "subdirectory path",
-			root:     tmpDir,
-			subPath:  "subdir",
-			wantErr:  false,
+			name:    "subdirectory path",
+			root:    tmpDir,
+			subPath: "subdir",
+			wantErr: false,
 		},
 		{
 			name:    "empty subpath defaults to root",
@@ -196,6 +196,33 @@ func TestGetStorageInfo(t *testing.T) {
 	}
 	if info.UsedPercent < 0 || info.UsedPercent > 100 {
 		t.Fatalf("GetStorageInfo() returned invalid used percent: %f", info.UsedPercent)
+	}
+}
+
+func TestOwnershipForPathUsesParentOwnerForNewFile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "test-ownership-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	subDir := filepath.Join(tmpDir, "child")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	ownership, err := OwnershipForPath(tmpDir, "/child/new.txt")
+	if err != nil {
+		t.Fatalf("OwnershipForPath() error = %v", err)
+	}
+
+	parentOwnership, err := ownershipFromStat(subDir)
+	if err != nil {
+		t.Fatalf("ownershipFromStat() error = %v", err)
+	}
+
+	if ownership.UID != parentOwnership.UID || ownership.GID != parentOwnership.GID {
+		t.Fatalf("OwnershipForPath() = %+v, want %+v", ownership, parentOwnership)
 	}
 }
 

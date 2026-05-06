@@ -3,18 +3,23 @@ package archive
 import (
 	"archive/zip"
 	"fmt"
+	"hubfly-files/internal/filesystem"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-func Zip(source, target string) error {
-	zipFile, err := os.Create(target)
+func Zip(source, target string, ownership *filesystem.Ownership) error {
+	zipFile, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
 	defer zipFile.Close()
+
+	if err := filesystem.ApplyOwnership(target, ownership); err != nil {
+		return err
+	}
 
 	archive := zip.NewWriter(zipFile)
 	defer archive.Close()
@@ -82,7 +87,7 @@ func Zip(source, target string) error {
 	return err
 }
 
-func Unzip(source, target string) error {
+func Unzip(source, target string, ownership *filesystem.Ownership) error {
 	reader, err := zip.OpenReader(source)
 	if err != nil {
 		return err
@@ -103,11 +108,13 @@ func Unzip(source, target string) error {
 		}
 
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(path, 0755)
+			if err := filesystem.CreateDirAllWithOwnership(path, 0755, ownership); err != nil {
+				return err
+			}
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		if err := filesystem.CreateDirAllWithOwnership(filepath.Dir(path), 0755, ownership); err != nil {
 			return err
 		}
 
@@ -115,6 +122,11 @@ func Unzip(source, target string) error {
 		var fileMode os.FileMode = 0644
 		outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode)
 		if err != nil {
+			return err
+		}
+
+		if err := filesystem.ApplyOwnership(path, ownership); err != nil {
+			outFile.Close()
 			return err
 		}
 

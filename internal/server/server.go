@@ -308,7 +308,14 @@ func (s *Server) handleZip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = archive.Zip(src, dst)
+	ownership, err := filesystem.OwnershipForPath(root, req.Target)
+	if err != nil {
+		log.Printf("Zip ownership error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = archive.Zip(src, dst, ownership)
 	if err != nil {
 		log.Printf("Zip error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -342,7 +349,14 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = archive.Unzip(src, dst)
+	ownership, err := filesystem.OwnershipForPath(root, req.Target)
+	if err != nil {
+		log.Printf("Unzip ownership error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = archive.Unzip(src, dst, ownership)
 	if err != nil {
 		log.Printf("Unzip error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

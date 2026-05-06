@@ -28,6 +28,11 @@ type StorageInfo struct {
 	UsedPercent    float64 `json:"usedPercent"`
 }
 
+type Ownership struct {
+	UID int
+	GID int
+}
+
 func SafePath(root, subPath string) (string, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -124,6 +129,100 @@ func GetStorageInfo(root, subPath string) (*StorageInfo, error) {
 	}, nil
 }
 
+func ownershipFromStat(path string) (*Ownership, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return nil, errors.New("unsupported file stat data")
+	}
+
+	return &Ownership{
+		UID: int(stat.Uid),
+		GID: int(stat.Gid),
+	}, nil
+}
+
+func nearestExistingOwnership(path string) (*Ownership, error) {
+	current := filepath.Clean(path)
+	for {
+		info, err := os.Stat(current)
+		if err == nil {
+			if info.IsDir() {
+				return ownershipFromStat(current)
+			}
+			return ownershipFromStat(filepath.Dir(current))
+		}
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+
+		next := filepath.Dir(current)
+		if next == current {
+			break
+		}
+		current = next
+	}
+
+	return nil, os.ErrNotExist
+}
+
+func DesiredOwnershipForPath(path string) (*Ownership, error) {
+	if _, err := os.Stat(path); err == nil {
+		return ownershipFromStat(path)
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	return nearestExistingOwnership(filepath.Dir(path))
+}
+
+func OwnershipForPath(root, subPath string) (*Ownership, error) {
+	path, err := SafePath(root, subPath)
+	if err != nil {
+		return nil, err
+	}
+	return DesiredOwnershipForPath(path)
+}
+
+func ApplyOwnership(path string, ownership *Ownership) error {
+	if ownership == nil || os.Geteuid() != 0 {
+		return nil
+	}
+	return os.Chown(path, ownership.UID, ownership.GID)
+}
+
+func CreateDirAllWithOwnership(path string, perm os.FileMode, ownership *Ownership) error {
+	cleanPath := filepath.Clean(path)
+	if info, err := os.Stat(cleanPath); err == nil {
+		if info.IsDir() {
+			return nil
+		}
+		return &os.PathError{Op: "mkdir", Path: cleanPath, Err: syscall.ENOTDIR}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	parent := filepath.Dir(cleanPath)
+	if parent != cleanPath {
+		if err := CreateDirAllWithOwnership(parent, perm, ownership); err != nil {
+			return err
+		}
+	}
+
+	if err := os.Mkdir(cleanPath, perm); err != nil {
+		if os.IsExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	return ApplyOwnership(cleanPath, ownership)
+}
+
 func ReadFile(root, subPath string) (io.ReadCloser, error) {
 	path, err := SafePath(root, subPath)
 	if err != nil {
@@ -137,11 +236,30 @@ func WriteFile(root, subPath string, data io.Reader) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.Create(path)
+
+	ownership, err := DesiredOwnershipForPath(path)
+	if err != nil {
+		return err
+	}
+
+	_, statErr := os.Stat(path)
+	fileExists := statErr == nil
+	if statErr != nil && !os.IsNotExist(statErr) {
+		return statErr
+	}
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+
+	if !fileExists {
+		if err := ApplyOwnership(path, ownership); err != nil {
+			return err
+		}
+	}
+
 	_, err = io.Copy(f, data)
 	return err
 }
@@ -171,5 +289,11 @@ func Mkdir(root, subPath string) error {
 	if err != nil {
 		return err
 	}
-	return os.MkdirAll(path, 0755)
+
+	ownership, err := DesiredOwnershipForPath(path)
+	if err != nil {
+		return err
+	}
+
+	return CreateDirAllWithOwnership(path, 0755, ownership)
 }

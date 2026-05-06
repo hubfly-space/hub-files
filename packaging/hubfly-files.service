@@ -10,6 +10,13 @@ WorkingDirectory=/opt/hubfly-files
 ExecStart=/usr/local/bin/hubfly-files
 Restart=on-failure
 RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+LockPersonality=true
 
 [Install]
 WantedBy=multi-user.target

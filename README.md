@@ -28,6 +28,16 @@ Re-running the installer updates an existing installation in place:
 - preserves `/etc/hubfly-files/hubfly-files.env`
 - restarts the `hubfly-files` systemd service if it already exists
 
+## Ownership behavior
+
+If the service runs as `root`, HubFly Files now avoids creating unnecessary root-owned content during normal file operations.
+
+- new files inherit the owner and group of the destination file or parent directory
+- new folders inherit the owner and group of the nearest existing parent directory
+- zip outputs and extracted content inherit the target directory ownership
+
+This keeps edits aligned with the mounted path you are managing instead of defaulting every new inode to `root:root`.
+
 ## Local development
 
 Build the frontend first:
