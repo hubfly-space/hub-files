@@ -85,52 +85,56 @@ export const FileItem: React.FC<FileItemProps> = ({
         layout
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        whileHover={{ y: -4 }}
+        whileHover={{ y: -6, transition: { duration: 0.2 } }}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         className={cn(
-          "group relative flex flex-col items-center gap-3 p-5 rounded-2xl border transition-all cursor-pointer select-none",
+          "group relative flex flex-col items-center gap-4 p-6 rounded-[2rem] border transition-all cursor-pointer select-none",
           isSelected
-            ? "bg-primary/5 border-primary/30 shadow-md ring-1 ring-primary/20"
-            : "bg-card border-border/50 hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5"
+            ? "bg-primary/5 border-primary/40 shadow-xl shadow-primary/5 ring-1 ring-primary/20"
+            : "bg-card border-border/50 hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/10"
         )}
       >
         <div className={cn(
-          "w-14 h-14 rounded-2xl transition-all flex items-center justify-center relative",
-          isSelected ? "bg-primary/10" : "bg-secondary/50 group-hover:bg-primary/5"
+          "w-20 h-20 rounded-[1.75rem] transition-all flex items-center justify-center relative",
+          isSelected ? "bg-primary/10" : "bg-secondary/40 group-hover:bg-primary/5"
         )}>
+          {/* Subtle dots pattern on icon background */}
+          <div className="absolute inset-0 opacity-[0.1] pointer-events-none" 
+               style={{ backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '12px 12px' }} />
+          
           <FileIcon isDir={file.isDir} name={file.name} className={cn(
-            "w-8 h-8 transition-transform group-hover:scale-110 duration-300",
-            isSelected ? "text-primary" : "text-foreground/70"
+            "w-10 h-10 transition-transform group-hover:scale-110 duration-500 ease-out z-10",
+            isSelected ? "text-primary" : "text-foreground/80"
           )} />
 
           {(selectionMode || isSelected) && (
-            <div className="absolute -top-1.5 -right-1.5">
+            <div className="absolute -top-2 -right-2 z-20">
               {isSelected ? (
-                <div className="bg-primary rounded-full p-0.5 shadow-lg shadow-primary/30">
-                  <CheckCircle2 className="w-5 h-5 text-primary-foreground fill-primary" />
+                <div className="bg-primary rounded-xl p-1 shadow-lg shadow-primary/30 animate-in zoom-in duration-200">
+                  <CheckCircle2 className="w-5 h-5 text-primary-foreground" />
                 </div>
               ) : (
-                <div className="bg-background rounded-full p-0.5 border-2 border-muted-foreground/20">
-                  <Circle className="w-4 h-4 text-transparent" />
+                <div className="bg-background rounded-xl p-1 border-2 border-muted-foreground/20">
+                  <Circle className="w-5 h-5 text-transparent" />
                 </div>
               )}
             </div>
           )}
         </div>
 
-        <div className="flex flex-col items-center gap-0.5 w-full">
-          <span className="text-sm font-bold truncate w-full text-center px-1">
+        <div className="flex flex-col items-center gap-1 w-full z-10">
+          <span className="text-sm font-bold truncate w-full text-center px-2 group-hover:text-primary transition-colors">
             {file.name}
           </span>
           {!file.isDir && (
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-tight">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-70">
               {formatSize(file.size)}
             </span>
           )}
         </div>
 
-        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100" onClick={e => e.stopPropagation()}>
+        <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 z-20" onClick={e => e.stopPropagation()}>
           <FileItemActions
             file={file}
             onDelete={onDelete}
@@ -151,38 +155,46 @@ export const FileItem: React.FC<FileItemProps> = ({
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       className={cn(
-        "group flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer select-none border",
+        "group flex items-center justify-between p-4 rounded-2xl transition-all cursor-pointer select-none border",
         isSelected
-          ? "bg-primary/5 border-primary/20 shadow-sm"
-          : "bg-transparent border-transparent hover:bg-secondary/40 hover:border-border/50"
+          ? "bg-primary/5 border-primary/30 shadow-md ring-1 ring-primary/10"
+          : "bg-transparent border-transparent hover:bg-secondary/50 hover:border-border/50 hover:shadow-lg hover:shadow-black/5"
       )}
     >
-      <div className="flex items-center gap-4 flex-1 min-w-0">
-        <div className="relative shrink-0 w-10 h-10 rounded-lg bg-secondary/30 flex items-center justify-center group-hover:bg-secondary/50 transition-colors">
+      <div className="flex items-center gap-5 flex-1 min-w-0">
+        <div className="relative shrink-0 w-12 h-12 rounded-xl bg-secondary/50 flex items-center justify-center group-hover:bg-primary/5 transition-colors overflow-hidden">
+          {/* Subtle dots pattern on icon background */}
+          <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
+               style={{ backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '10px 10px' }} />
+          
           <FileIcon isDir={file.isDir} name={file.name} className={cn(
-            "w-5 h-5 transition-colors",
+            "w-6 h-6 transition-transform group-hover:scale-110 z-10",
             isSelected ? "text-primary" : "text-muted-foreground"
           )} />
           {(selectionMode || isSelected) && (
-            <div className="absolute -top-1.5 -left-1.5">
+            <div className="absolute -top-1.5 -left-1.5 z-20">
               {isSelected ? (
-                <CheckCircle2 className="w-4 h-4 text-primary fill-background" />
+                <div className="bg-primary rounded-lg p-0.5 shadow-md">
+                  <CheckCircle2 className="w-4 h-4 text-primary-foreground" />
+                </div>
               ) : (
-                <Circle className="w-4 h-4 text-muted-foreground/20 fill-background" />
+                <div className="bg-background rounded-lg p-0.5 border border-muted-foreground/20">
+                  <Circle className="w-4 h-4 text-transparent" />
+                </div>
               )}
             </div>
           )}
         </div>
         <div className="flex flex-col min-w-0">
-          <span className="text-sm font-semibold truncate group-hover:text-primary transition-colors">{file.name}</span>
-          <div className="flex items-center gap-3 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+          <span className="text-sm font-bold truncate group-hover:text-primary transition-colors">{file.name}</span>
+          <div className="flex items-center gap-4 text-[10px] text-muted-foreground font-bold uppercase tracking-widest opacity-70">
             {!file.isDir && (
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1.5">
                 <HardDrive className="w-3 h-3" />
                 {formatSize(file.size)}
               </span>
             )}
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1.5">
               <Calendar className="w-3 h-3" />
               {file.modTime}
             </span>
