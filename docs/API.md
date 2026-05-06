@@ -34,6 +34,7 @@ Runtime configuration is controlled by flags or environment variables.
 | Management port | `-mgmt-port` | `HUBFLY_MGMT_PORT` | `10014` |
 | Demo directory | `-demo-dir` | `HUBFLY_DEMO_DIR` | `./demo` |
 | Built UI directory | `-ui-dir` | `HUBFLY_UI_DIR` | `./frontend/dist` |
+| Maximum upload bytes | `-max-upload-bytes` | `HUBFLY_MAX_UPLOAD_BYTES` | `107374182400` |
 
 ## Base URLs
 
@@ -131,13 +132,13 @@ The server enforces these request size limits:
 | Limit | Value | Applies to |
 | --- | --- | --- |
 | JSON body limit | `1 MiB` | `/api/mkdir`, `/api/rename`, `/api/delete`, `/api/zip`, `/api/extract` |
-| Upload body limit | `10 MiB` | `/api/upload` |
+| Upload body limit | `100 GiB` by default, configurable with `HUBFLY_MAX_UPLOAD_BYTES`; `0` disables the cap | `/api/upload` |
 
 Notes:
 
 - `PUT /api/file` does not use the JSON-body middleware and is not explicitly capped by the same `1 MiB` limit
 - `POST /sessions` on the management server does not use the JSON-body middleware either
-- upload parsing rejects oversized multipart bodies with `413 Request Entity Too Large`
+- upload streaming rejects oversized bodies with `413 Request Entity Too Large`
 
 ## Data Models
 
@@ -433,7 +434,7 @@ If the service runs as root:
 
 ## `POST /api/upload`
 
-Uploads one file using multipart form data.
+Uploads one file. Raw request-body uploads are preferred for large files because the server streams the body directly to a temporary file and atomically renames it into place after the upload finishes.
 
 ### Authentication
 
@@ -441,9 +442,26 @@ Requires a non-read-only session with `allowUpload=true`.
 
 ### Content type
 
+Preferred:
+
+`application/octet-stream` or the file's content type
+
+Also supported:
+
 `multipart/form-data`
 
+### Query parameters
+
+For raw uploads:
+
+| Parameter | Required | Type | Description |
+| --- | --- | --- | --- |
+| `path` | no | string | Destination directory relative to session root |
+| `filename` | yes | string | Destination filename. Path separators are rejected. |
+
 ### Form fields
+
+For multipart uploads:
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
@@ -468,11 +486,12 @@ Body:
 
 ### Size limits
 
-- maximum upload request size: `10 MiB`
+- maximum upload request size: `100 GiB` by default
+- set `HUBFLY_MAX_UPLOAD_BYTES=0` or `-max-upload-bytes=0` to disable the application-level upload cap
 
 ### Ownership behavior
 
-If a new file is created while the service runs as root, it inherits the owner/group of the destination directory instead of defaulting to `root:root`.
+Uploads are written to a hidden temporary file in the destination directory and renamed over the target only after the stream completes. If a new file is created while the service runs as root, it inherits the owner/group of the destination directory instead of defaulting to `root:root`.
 
 ### Error responses
 
@@ -482,7 +501,8 @@ If a new file is created while the service runs as root, it inherits the owner/g
 | `403 Forbidden` | `Read-only session` | Session is read-only |
 | `403 Forbidden` | `AllowUpload not allowed for this session` | `allowUpload=false` |
 | `400 Bad Request` | `Invalid file upload` | Multipart body missing `file` or malformed |
-| `413 Request Entity Too Large` | `File too large (max 10MB)` | Upload exceeds limit |
+| `400 Bad Request` | `Invalid file name` | Raw upload filename is empty or contains path separators |
+| `413 Request Entity Too Large` | `File too large` | Upload exceeds limit |
 | `400 Bad Request` | `Invalid path` | Destination path failed validation |
 | `403 Forbidden` | `Permission denied` | OS-level permission failure |
 | `404 Not Found` | `Not found` | Destination parent directory does not exist |
@@ -920,9 +940,9 @@ curl -X PUT \
 ```bash
 curl -X POST \
   -H "Authorization: Bearer <sessionCode>" \
-  -F "file=@./photo.jpg" \
-  -F "path=/uploads" \
-  "http://localhost:10015/api/upload"
+  -H "Content-Type: image/jpeg" \
+  --data-binary @./photo.jpg \
+  "http://localhost:10015/api/upload?path=/uploads&filename=photo.jpg"
 ```
 
 ## Create a directory

@@ -66,13 +66,15 @@ export const api = {
     onProgress?: (loaded: number, total: number) => void
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('path', path);
-
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${API_BASE}/upload`);
+      const params = new URLSearchParams({
+        path,
+        filename: file.name,
+      });
+
+      xhr.open('POST', `${API_BASE}/upload?${params.toString()}`);
       xhr.setRequestHeader('Authorization', `Bearer ${api.getToken()}`);
+      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
 
       if (onProgress && xhr.upload) {
         xhr.upload.onprogress = (e) => {
@@ -91,7 +93,8 @@ export const api = {
       };
 
       xhr.onerror = () => reject(new Error('Network error'));
-      xhr.send(formData);
+      xhr.onabort = () => reject(new Error('Upload cancelled'));
+      xhr.send(file);
     });
   },
 
