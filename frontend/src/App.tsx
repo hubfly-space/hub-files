@@ -90,6 +90,7 @@ function App() {
   const handleUpload = async (files: File[]) => {
     for (const file of files) {
       const id = Math.random().toString(36).substring(7);
+      const startTime = Date.now();
       const newUpload: UploadStatus = {
         id,
         name: file.name,
@@ -100,22 +101,50 @@ function App() {
       setActiveUploads((prev) => [newUpload, ...prev]);
 
       try {
-        await api.upload(path, file, (progress) => {
+        await api.upload(path, file, (loaded, total) => {
+          const progress = Math.round((loaded / total) * 100);
+          const elapsed = (Date.now() - startTime) / 1000; // seconds
+          const speedBytes = elapsed > 0 ? loaded / elapsed : 0;
+          
+          // Format speed
+          let speed = "";
+          if (speedBytes > 1024 * 1024) {
+            speed = `${(speedBytes / (1024 * 1024)).toFixed(1)} MB/s`;
+          } else if (speedBytes > 1024) {
+            speed = `${(speedBytes / 1024).toFixed(1)} KB/s`;
+          } else {
+            speed = `${speedBytes.toFixed(0)} B/s`;
+          }
+
+          // Format ETA
+          let eta = "";
+          if (speedBytes > 0) {
+            const remainingBytes = total - loaded;
+            const remainingSeconds = remainingBytes / speedBytes;
+            if (remainingSeconds > 3600) {
+              eta = `${Math.floor(remainingSeconds / 3600)}h ${Math.floor((remainingSeconds % 3600) / 60)}m`;
+            } else if (remainingSeconds > 60) {
+              eta = `${Math.floor(remainingSeconds / 60)}m ${Math.floor(remainingSeconds % 60)}s`;
+            } else {
+              eta = `${Math.floor(remainingSeconds)}s`;
+            }
+          }
+
           setActiveUploads((prev) =>
-            prev.map((u) => (u.id === id ? { ...u, progress } : u)),
+            prev.map((u) => (u.id === id ? { ...u, progress, speed, eta } : u)),
           );
         });
 
         setActiveUploads((prev) =>
           prev.map((u) =>
-            u.id === id ? { ...u, status: "completed", progress: 100 } : u,
+            u.id === id ? { ...u, status: "completed", progress: 100, speed: undefined, eta: undefined } : u,
           ),
         );
         refresh();
       } catch (err: any) {
         setActiveUploads((prev) =>
           prev.map((u) =>
-            u.id === id ? { ...u, status: "error", error: err.message } : u,
+            u.id === id ? { ...u, status: "error", error: err.message, speed: undefined, eta: undefined } : u,
           ),
         );
       }

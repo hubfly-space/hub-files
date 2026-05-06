@@ -18,6 +18,8 @@ export interface UploadStatus {
   progress: number;
   status: 'uploading' | 'completed' | 'error';
   error?: string;
+  speed?: string;
+  eta?: string;
 }
 
 interface UploadProgressProps {
@@ -127,11 +129,20 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ uploads, onClear
                       />
                     </div>
 
-                    {upload.error && (
-                      <p className="text-[10px] text-destructive font-medium leading-tight">
-                        {upload.error}
-                      </p>
-                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      {upload.status === 'uploading' && (
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
+                          {upload.speed && <span>{upload.speed}</span>}
+                          {upload.speed && upload.eta && <span>•</span>}
+                          {upload.eta && <span>{upload.eta} remaining</span>}
+                        </div>
+                      )}
+                      {upload.error && (
+                        <p className="text-[10px] text-destructive font-medium leading-tight">
+                          {upload.error}
+                        </p>
+                      )}
+                    </div>
 
                     <button 
                       onClick={() => onClear(upload.id)}

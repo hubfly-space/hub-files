@@ -63,7 +63,7 @@ export const api = {
   upload: (
     path: string,
     file: File,
-    onProgress?: (percent: number) => void
+    onProgress?: (loaded: number, total: number) => void
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
       const formData = new FormData();
@@ -77,8 +77,7 @@ export const api = {
       if (onProgress && xhr.upload) {
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            onProgress(percent);
+            onProgress(e.loaded, e.total);
           }
         };
       }
