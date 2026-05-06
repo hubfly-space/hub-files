@@ -5,6 +5,8 @@ import { Breadcrumb } from "./components/Breadcrumb";
 import { Toolbar } from "./components/Toolbar";
 import { FileItem } from "./components/FileItem";
 import { FileViewer } from "./components/FileViewer";
+import { UploadProgress } from "./components/UploadProgress";
+import type { UploadStatus } from "./components/UploadProgress";
 import { api } from "./api";
 import {
   Dialog,
@@ -50,6 +52,7 @@ function App() {
 
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
+  const [activeUploads, setActiveUploads] = useState<UploadStatus[]>([]);
 
   const [renameDialog, setRenameDialog] = useState<{
     open: boolean;
@@ -84,36 +87,45 @@ function App() {
 
   const handleUploadClick = () => fileInputRef.current?.click();
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = async (files: File[]) => {
+    for (const file of files) {
+      const id = Math.random().toString(36).substring(7);
+      const newUpload: UploadStatus = {
+        id,
+        name: file.name,
+        progress: 0,
+        status: "uploading",
+      };
+
+      setActiveUploads((prev) => [newUpload, ...prev]);
+
+      try {
+        await api.upload(path, file, (progress) => {
+          setActiveUploads((prev) =>
+            prev.map((u) => (u.id === id ? { ...u, progress } : u)),
+          );
+        });
+
+        setActiveUploads((prev) =>
+          prev.map((u) =>
+            u.id === id ? { ...u, status: "completed", progress: 100 } : u,
+          ),
+        );
+        refresh();
+      } catch (err: any) {
+        setActiveUploads((prev) =>
+          prev.map((u) =>
+            u.id === id ? { ...u, status: "error", error: err.message } : u,
+          ),
+        );
+      }
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
-      let uploaded = 0;
-      let failed = 0;
-      for (const file of files) {
-        try {
-          await api.upload(path, file);
-          uploaded++;
-        } catch (err) {
-          failed++;
-          console.error(
-            `Failed to upload ${file.name}:`,
-            err as unknown as string,
-          );
-        }
-      }
-      if (failed > 0) {
-        toast({
-          title: "Upload partially failed",
-          description: `${uploaded} uploaded, ${failed} failed.`,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Uploaded",
-          description: `${uploaded} file(s) uploaded successfully.`,
-        });
-      }
-      refresh();
+      handleUpload(files);
       if (e.target) e.target.value = "";
     }
   };
@@ -123,33 +135,7 @@ function App() {
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      let uploaded = 0;
-      let failed = 0;
-      for (const file of files) {
-        try {
-          await api.upload(path, file);
-          uploaded++;
-        } catch (err) {
-          failed++;
-          console.error(
-            `Failed to upload ${file.name}:`,
-            err as unknown as string,
-          );
-        }
-      }
-      if (failed > 0) {
-        toast({
-          title: "Upload partially failed",
-          description: `${uploaded} uploaded, ${failed} failed.`,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Uploaded",
-          description: `${uploaded} file(s) uploaded via drop.`,
-        });
-      }
-      refresh();
+      handleUpload(files);
     }
   };
 
@@ -646,6 +632,11 @@ function App() {
       </Dialog>
 
       <Toaster />
+      <UploadProgress 
+        uploads={activeUploads} 
+        onClear={(id) => setActiveUploads(prev => prev.filter(u => u.id !== id))}
+        onClearAll={() => setActiveUploads([])}
+      />
     </div>
   );
 }

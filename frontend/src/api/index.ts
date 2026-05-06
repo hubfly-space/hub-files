@@ -60,19 +60,40 @@ export const api = {
     if (!res.ok) throw new Error(await res.text());
   },
 
-  upload: async (path: string, file: File): Promise<void> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('path', path);
+  upload: (
+    path: string,
+    file: File,
+    onProgress?: (percent: number) => void
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('path', path);
 
-    const res = await fetch(`${API_BASE}/upload`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${api.getToken()}`,
-      },
-      body: formData,
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_BASE}/upload`);
+      xhr.setRequestHeader('Authorization', `Bearer ${api.getToken()}`);
+
+      if (onProgress && xhr.upload) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            onProgress(percent);
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+        } else {
+          reject(new Error(xhr.responseText || 'Upload failed'));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('Network error'));
+      xhr.send(formData);
     });
-    if (!res.ok) throw new Error(await res.text());
   },
 
   mkdir: async (path: string): Promise<void> => {
