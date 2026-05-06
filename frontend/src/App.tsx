@@ -88,8 +88,13 @@ function App() {
   const handleUploadClick = () => fileInputRef.current?.click();
 
   const handleUpload = async (files: File[]) => {
+    const makeUploadId = () => {
+      if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+      return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    };
+
     const uploads = files.map((file) => ({
-      id: crypto.randomUUID(),
+      id: makeUploadId(),
       file,
     }));
     const uploadPath = path;
