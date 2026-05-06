@@ -2,12 +2,18 @@ package archive
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"hubfly-files/internal/filesystem"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+)
+
+var (
+	ErrIllegalArchivePath = errors.New("illegal archive path")
+	ErrArchiveSymlink     = errors.New("archive symlinks are not allowed")
 )
 
 func Zip(source, target string, ownership *filesystem.Ownership) error {
@@ -97,14 +103,14 @@ func Unzip(source, target string, ownership *filesystem.Ownership) error {
 	for _, f := range reader.File {
 		// Reject symlinks to prevent ZipSlip variant attacks
 		if f.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("symlinks are not allowed in zip files: %s", f.Name)
+			return fmt.Errorf("%w: %s", ErrArchiveSymlink, f.Name)
 		}
 
 		path := filepath.Join(target, f.Name)
 
 		// Check for ZipSlip vulnerability
 		if !strings.HasPrefix(path, filepath.Clean(target)+string(os.PathSeparator)) {
-			return fmt.Errorf("illegal file path: %s", path)
+			return fmt.Errorf("%w: %s", ErrIllegalArchivePath, path)
 		}
 
 		if f.FileInfo().IsDir() {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"hubfly-files/internal/archive"
 	"hubfly-files/internal/config"
 	"hubfly-files/internal/filesystem"
@@ -41,6 +42,56 @@ func maxBytesMiddleware(n int64) func(http.Handler) http.Handler {
 			r.Body = http.MaxBytesReader(w, r.Body, n)
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+func methodHandler(method string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != method {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func methodHandlers(methods []string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		for _, method := range methods {
+			if r.Method == method {
+				next(w, r)
+				return
+			}
+		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func writeFileSystemError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, filesystem.ErrUnauthorized):
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+	case errors.Is(err, os.ErrNotExist):
+		http.Error(w, "Not found", http.StatusNotFound)
+	case errors.Is(err, os.ErrPermission):
+		http.Error(w, "Permission denied", http.StatusForbidden)
+	default:
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+func writeArchiveError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, archive.ErrIllegalArchivePath), errors.Is(err, archive.ErrArchiveSymlink):
+		http.Error(w, "Invalid archive", http.StatusBadRequest)
+	case errors.Is(err, filesystem.ErrUnauthorized):
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+	case errors.Is(err, os.ErrNotExist):
+		http.Error(w, "Not found", http.StatusNotFound)
+	case errors.Is(err, os.ErrPermission):
+		http.Error(w, "Permission denied", http.StatusForbidden)
+	default:
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
 
@@ -134,7 +185,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	files, err := filesystem.ListDir(root, path)
 	if err != nil {
 		log.Printf("List error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeFileSystemError(w, err)
 		return
 	}
 
@@ -149,7 +200,7 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	storage, err := filesystem.GetStorageInfo(root, path)
 	if err != nil {
 		log.Printf("Storage error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeFileSystemError(w, err)
 		return
 	}
 
@@ -164,7 +215,7 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	reader, err := filesystem.ReadFile(root, path)
 	if err != nil {
 		log.Printf("GetFile error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeFileSystemError(w, err)
 		return
 	}
 	defer reader.Close()
@@ -182,7 +233,7 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 	err := filesystem.WriteFile(root, path, r.Body)
 	if err != nil {
 		log.Printf("PutFile error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeFileSystemError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -216,7 +267,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	err = filesystem.WriteFile(root, finalPath, file)
 	if err != nil {
 		log.Printf("Upload error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeFileSystemError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -238,7 +289,7 @@ func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {
 	err := filesystem.Mkdir(root, req.Path)
 	if err != nil {
 		log.Printf("Mkdir error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeFileSystemError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -261,7 +312,7 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 	err := filesystem.Rename(root, req.OldPath, req.NewPath)
 	if err != nil {
 		log.Printf("Rename error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeFileSystemError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -277,7 +328,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	err := filesystem.DeleteFile(root, path)
 	if err != nil {
 		log.Printf("Delete error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeFileSystemError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -311,14 +362,14 @@ func (s *Server) handleZip(w http.ResponseWriter, r *http.Request) {
 	ownership, err := filesystem.OwnershipForPath(root, req.Target)
 	if err != nil {
 		log.Printf("Zip ownership error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeFileSystemError(w, err)
 		return
 	}
 
 	err = archive.Zip(src, dst, ownership)
 	if err != nil {
 		log.Printf("Zip error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeArchiveError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -352,14 +403,14 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 	ownership, err := filesystem.OwnershipForPath(root, req.Target)
 	if err != nil {
 		log.Printf("Unzip ownership error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeFileSystemError(w, err)
 		return
 	}
 
 	err = archive.Unzip(src, dst, ownership)
 	if err != nil {
 		log.Printf("Unzip error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeArchiveError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -400,7 +451,14 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	session, err := s.Sessions.CreateSession(absRoot, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete)
 	if err != nil {
 		log.Printf("CreateSession error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		switch {
+		case errors.Is(err, sessions.ErrRateLimitExceeded):
+			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		case errors.Is(err, sessions.ErrMaxSessions):
+			http.Error(w, "Max sessions reached", http.StatusConflict)
+		default:
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -446,22 +504,22 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// UI API
-	mux.HandleFunc("/api/list", s.authMiddleware(s.handleList))
-	mux.HandleFunc("/api/storage", s.authMiddleware(s.handleStorage))
-	mux.HandleFunc("/api/file", s.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/list", s.authMiddleware(methodHandler(http.MethodGet, s.handleList)))
+	mux.HandleFunc("/api/storage", s.authMiddleware(methodHandler(http.MethodGet, s.handleStorage)))
+	mux.HandleFunc("/api/file", s.authMiddleware(methodHandlers([]string{http.MethodGet, http.MethodPut}, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			s.handleGetFile(w, r)
-		} else if r.Method == http.MethodPut {
-			s.handlePutFile(w, r)
+			return
 		}
-	}))
-	mux.HandleFunc("/api/upload", s.authMiddleware(s.handleUpload))
+		s.handlePutFile(w, r)
+	})))
+	mux.HandleFunc("/api/upload", s.authMiddleware(methodHandler(http.MethodPost, s.handleUpload)))
 	// JSON endpoints with max bytes middleware
-	mux.Handle("/api/mkdir", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleMkdir)))
-	mux.Handle("/api/rename", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleRename)))
-	mux.Handle("/api/delete", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleDelete)))
-	mux.Handle("/api/zip", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleZip)))
-	mux.Handle("/api/extract", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(s.handleExtract)))
+	mux.Handle("/api/mkdir", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandler(http.MethodPost, s.handleMkdir))))
+	mux.Handle("/api/rename", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandler(http.MethodPost, s.handleRename))))
+	mux.Handle("/api/delete", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandler(http.MethodDelete, s.handleDelete))))
+	mux.Handle("/api/zip", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandler(http.MethodPost, s.handleZip))))
+	mux.Handle("/api/extract", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandler(http.MethodPost, s.handleExtract))))
 	mux.HandleFunc("/", s.handleUI)
 
 	return mux
@@ -469,12 +527,6 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 
 func (s *Server) SetupManagementRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/sessions", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			s.handleCreateSession(w, r)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
+	mux.HandleFunc("/sessions", methodHandler(http.MethodPost, s.handleCreateSession))
 	return mux
 }

@@ -56,6 +56,10 @@ go run ./cmd/hubfly-files
 
 The server reads built UI assets from `./frontend/dist` by default. Override that path with `HUBFLY_UI_DIR` or `-ui-dir`.
 
+## API documentation
+
+Detailed HTTP API documentation is available in [docs/API.md](/home/bonheur/Desktop/Projects/hubfly/tools/hubfly-files/docs/API.md:1).
+
 ## Release process
 
 Push a tag such as `v1.0.0` and GitHub Actions will:

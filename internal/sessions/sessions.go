@@ -3,9 +3,15 @@ package sessions
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
+)
+
+var (
+	ErrRateLimitExceeded = errors.New("rate limit exceeded")
+	ErrMaxSessions       = errors.New("max sessions reached")
 )
 
 type Session struct {
@@ -51,7 +57,7 @@ func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool, allowU
 	s.createLog = valid
 	if len(s.createLog) >= 10 {
 		s.createMu.Unlock()
-		return nil, fmt.Errorf("rate limit exceeded: max 10 sessions per minute")
+		return nil, fmt.Errorf("%w: max 10 sessions per minute", ErrRateLimitExceeded)
 	}
 	s.createLog = append(s.createLog, now)
 	s.createMu.Unlock()
@@ -66,9 +72,9 @@ func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool, allowU
 		Root:        root,
 		ExpiresAt:   time.Now().Add(time.Duration(ttlSeconds) * time.Second),
 		ReadOnly:    readonly,
-		AllowUpload:  allowUpload,
-		AllowEdit:    allowEdit,
-		AllowDelete:  allowDelete,
+		AllowUpload: allowUpload,
+		AllowEdit:   allowEdit,
+		AllowDelete: allowDelete,
 	}
 
 	s.mu.Lock()
@@ -76,7 +82,7 @@ func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool, allowU
 
 	// Check max sessions limit
 	if len(s.sessions) >= s.maxSessions {
-		return nil, fmt.Errorf("max sessions limit reached: %d", s.maxSessions)
+		return nil, fmt.Errorf("%w: %d", ErrMaxSessions, s.maxSessions)
 	}
 
 	s.sessions[token] = session
