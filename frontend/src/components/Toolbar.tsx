@@ -69,97 +69,113 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
   return (
     <TooltipProvider>
-      <div className="flex items-center gap-3 px-6 py-2">
-        {selectedCount > 0 ? (
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-3"
-          >
-            <span className="text-xs font-medium bg-foreground text-background px-2.5 py-1 rounded-full">
-              {selectedCount}
-            </span>
-            <Button variant="ghost" size="sm" onClick={onClearSelection} className="h-7 text-xs">
-              <X className="w-3 h-3 mr-1" /> Clear
-            </Button>
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={onBulkZip} className="h-7 text-xs">
-                <Package className="w-3.5 h-3.5 mr-1" /> Zip
-              </Button>
-              <Button variant="ghost" size="sm" onClick={onBulkDelete} className="h-7 text-xs text-destructive hover:text-destructive">
-                <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
-              </Button>
-            </div>
-          </motion.div>
-        ) : (
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-            <Input
-              placeholder="Search files..."
-              defaultValue={search}
-              onChange={handleSearchChange}
-              className="pl-9 h-9 bg-secondary/50 border-0 focus-visible:ring-1 focus-visible:ring-foreground/20 rounded-lg"
-            />
-          </div>
-        )}
+      <div className="flex items-center gap-4 py-1">
+        <div className="relative flex-1 max-w-md group">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+          <Input
+            placeholder="Search in folder..."
+            defaultValue={search}
+            onChange={handleSearchChange}
+            className="pl-10 h-10 bg-secondary/30 border-transparent focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary/30 rounded-xl transition-all"
+          />
+        </div>
 
-        <div className="flex items-center gap-1 ml-auto">
-          {selectedCount === 0 && (
-            <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={selectionMode ? "default" : "ghost"}
-                    size="icon"
-                    onClick={onSelectionModeToggle}
-                    className={cn("h-8 w-8 rounded-lg", selectionMode && "shadow-sm")}
-                  >
-                    {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{selectionMode ? "Cancel" : "Select"}</TooltipContent>
-              </Tooltip>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <AnimatePresence mode="wait">
+            {selectedCount > 0 ? (
+              <motion.div
+                key="actions"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="flex items-center gap-1.5 bg-primary/5 p-1 rounded-xl border border-primary/10"
+              >
+                <div className="px-3 py-1 bg-primary rounded-lg text-primary-foreground text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-primary/20">
+                  {selectedCount} Selected
+                </div>
+                <div className="w-px h-4 bg-primary/20 mx-1" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={onBulkZip} className="h-8 w-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors">
+                      <Package className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Archive Selected</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={onBulkDelete} className="h-8 w-8 rounded-lg hover:bg-destructive/10 hover:text-destructive transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete Selected</TooltipContent>
+                </Tooltip>
+                <Button variant="ghost" size="icon" onClick={onClearSelection} className="h-8 w-8 rounded-lg">
+                  <X className="w-4 h-4" />
+                </Button>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="tools"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-center gap-1.5"
+              >
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={selectionMode ? "default" : "secondary"}
+                      size="icon"
+                      onClick={onSelectionModeToggle}
+                      className={cn("h-10 w-10 rounded-xl transition-all shadow-sm", selectionMode ? "shadow-primary/20" : "bg-secondary/50")}
+                    >
+                      {selectionMode ? <CheckSquare className="w-4.5 h-4.5" /> : <Square className="w-4.5 h-4.5" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{selectionMode ? "Exit Selection" : "Enter Selection Mode"}</TooltipContent>
+                </Tooltip>
 
-              <div className="w-px h-4 bg-border mx-1" />
+                <div className="w-px h-6 bg-border/60 mx-1" />
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={onUpload} className="h-8 w-8 rounded-lg">
-                    <Upload className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Upload</TooltipContent>
-              </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="secondary" size="icon" onClick={onUpload} className="h-10 w-10 rounded-xl bg-secondary/50 hover:bg-primary hover:text-primary-foreground transition-all">
+                      <Upload className="w-4.5 h-4.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Upload Files</TooltipContent>
+                </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={onNewFolder} className="h-8 w-8 rounded-lg">
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>New Folder</TooltipContent>
-              </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="secondary" size="icon" onClick={onNewFolder} className="h-10 w-10 rounded-xl bg-secondary/50 transition-all">
+                      <Plus className="w-4.5 h-4.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>New Folder</TooltipContent>
+                </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={onRefresh} className="h-8 w-8 rounded-lg">
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Refresh</TooltipContent>
-              </Tooltip>
-            </>
-          )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="secondary" size="icon" onClick={onRefresh} className="h-10 w-10 rounded-xl bg-secondary/50 transition-all">
+                      <RefreshCw className="w-4.5 h-4.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Refresh</TooltipContent>
+                </Tooltip>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <div className="w-px h-4 bg-border mx-1" />
+          <div className="w-px h-6 bg-border/60 mx-1" />
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={onViewToggle} className="h-8 w-8 rounded-lg">
-                {viewMode === 'list' ? <LayoutGrid className="w-4 h-4" /> : <List className="w-4 h-4" />}
+              <Button variant="secondary" size="icon" onClick={onViewToggle} className="h-10 w-10 rounded-xl bg-secondary/50 transition-all">
+                {viewMode === 'list' ? <LayoutGrid className="w-4.5 h-4.5" /> : <List className="w-4.5 h-4.5" />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{viewMode === 'list' ? 'Grid' : 'List'}</TooltipContent>
+            <TooltipContent>Switch to {viewMode === 'list' ? 'Grid' : 'List'} View</TooltipContent>
           </Tooltip>
         </div>
       </div>
