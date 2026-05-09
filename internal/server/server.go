@@ -259,6 +259,11 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer reader.Close()
 
+	if r.URL.Query().Get("download") == "1" {
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+filepath.Base(path)+"\"")
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+
 	io.Copy(w, reader)
 }
 

@@ -296,6 +296,28 @@ function App() {
     }
   };
 
+  const handleMove = async (sourceName: string, targetFolderName: string) => {
+    if (sourceName === targetFolderName) return;
+    
+    const sourcePath = path === '/' ? `/${sourceName}` : `${path}/${sourceName}`;
+    const targetPath = path === '/' ? `/${targetFolderName}/${sourceName}` : `${path}/${targetFolderName}/${sourceName}`;
+    
+    try {
+      await api.rename(sourcePath, targetPath);
+      toast({
+        title: "Moved Successfully",
+        description: `Moved ${sourceName} into ${targetFolderName}`,
+      });
+      refresh();
+    } catch (err: any) {
+      toast({
+        title: "Move Failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-background flex flex-col selection:bg-primary/10">
       <div className="w-full h-full flex flex-col overflow-hidden">
@@ -529,6 +551,7 @@ function App() {
                               description: `Extracting ${name}...`,
                             });
                           }}
+                          onMove={handleMove}
                         />
                       ))}
                     </motion.div>

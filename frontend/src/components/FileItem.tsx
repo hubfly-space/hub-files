@@ -34,14 +34,16 @@ interface FileItemProps {
   onRename: (name: string) => void;
   onZip: (name: string) => void;
   onExtract: (name: string) => void;
+  onMove?: (sourceName: string, targetFolderName: string) => void;
 }
 
 export const FileItem: React.FC<FileItemProps> = ({
   file, viewMode, isSelected, selectionMode,
-  onNavigate, onSelect, onDelete, onRename, onZip, onExtract
+  onNavigate, onSelect, onDelete, onRename, onZip, onExtract, onMove
 }) => {
   const clickTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDoubleClick = useRef(false);
+  const [isDragOver, setIsDragOver] = React.useState(false);
 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -79,6 +81,41 @@ export const FileItem: React.FC<FileItemProps> = ({
     onNavigate(file.name);
   };
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('application/json', JSON.stringify({ name: file.name }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (file.isDir) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (!isDragOver) setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (file.isDir) {
+      e.preventDefault();
+      setIsDragOver(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    if (file.isDir) {
+      e.preventDefault();
+      setIsDragOver(false);
+      try {
+        const data = JSON.parse(e.dataTransfer.getData('application/json'));
+        if (data && data.name && data.name !== file.name && onMove) {
+          onMove(data.name, file.name);
+        }
+      } catch (err) {
+        // ignore invalid drag data
+      }
+    }
+  };
+
   if (viewMode === 'grid') {
     return (
       <motion.div
@@ -88,8 +125,15 @@ export const FileItem: React.FC<FileItemProps> = ({
         whileHover={{ y: -6, transition: { duration: 0.2 } }}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
+        draggable
+        onDragStartCapture={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={cn(
           "group relative flex flex-col items-center gap-4 p-6 rounded-[2rem] border transition-all cursor-pointer select-none",
+          file.name.startsWith('.') && "opacity-60 hover:opacity-100",
+          isDragOver && "ring-2 ring-primary bg-primary/10 shadow-lg scale-105",
           isSelected
             ? "bg-primary/5 border-primary/40 shadow-xl shadow-primary/5 ring-1 ring-primary/20"
             : "bg-card border-border/50 hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/10"
@@ -154,8 +198,15 @@ export const FileItem: React.FC<FileItemProps> = ({
       animate={{ opacity: 1, x: 0 }}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
+      draggable
+      onDragStartCapture={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       className={cn(
         "group flex items-center justify-between p-4 rounded-2xl transition-all cursor-pointer select-none border",
+        file.name.startsWith('.') && "opacity-60 hover:opacity-100",
+        isDragOver && "ring-2 ring-primary bg-primary/10 shadow-lg scale-[1.01]",
         isSelected
           ? "bg-primary/5 border-primary/30 shadow-md ring-1 ring-primary/10"
           : "bg-transparent border-transparent hover:bg-secondary/50 hover:border-border/50 hover:shadow-lg hover:shadow-black/5"

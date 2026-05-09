@@ -7,7 +7,9 @@ import {
   Play,
   Image as ImageIcon,
   File,
-  ExternalLink
+  ExternalLink,
+  Save,
+  Loader2
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -20,19 +22,36 @@ interface FileViewerProps {
 
 export const FileViewer: React.FC<FileViewerProps> = ({ path, name, onClose }) => {
   const [loading, setLoading] = useState(true);
+  const [content, setContent] = useState<string>('');
+  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   const ext = name.split('.').pop()?.toLowerCase();
   const isImage = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext || '');
   const isVideo = ['mp4', 'webm', 'ogg', 'mov'].includes(ext || '');
+  const isText = ['txt', 'md', 'json', 'js', 'jsx', 'ts', 'tsx', 'html', 'htm', 'css', 'scss', 'php', 'py', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'yaml', 'yml', 'toml', 'ini', 'conf', 'sh', 'bat', 'csv', 'sql', 'xml', 'env'].includes(ext || '');
 
   useEffect(() => {
-    // For images and videos, we don't need to fetch content ahead of time
-    setLoading(false);
-  }, [path]);
+    if (isText) {
+      setLoading(true);
+      api.getFile(path)
+        .then(text => {
+          setContent(text);
+          setLoading(false);
+        })
+        .catch(err => {
+          toast({ title: "Failed to load file", description: err.message, variant: "destructive" });
+          setLoading(false);
+        });
+    } else {
+      // For images and videos, we don't need to fetch content ahead of time
+      setLoading(false);
+    }
+  }, [path, isText]);
 
   const handleDownload = () => {
-    const url = `/api/file?path=${encodeURIComponent(path)}&download=1`;
+    const session = api.getToken();
+    const url = `/api/file?path=${encodeURIComponent(path)}&download=1&session=${session}`;
     const a = document.createElement('a');
     a.href = url;
     a.download = name;
@@ -41,18 +60,31 @@ export const FileViewer: React.FC<FileViewerProps> = ({ path, name, onClose }) =
     document.body.removeChild(a);
   };
 
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      await api.putFile(path, content);
+      toast({ title: "Saved successfully", description: "Your changes have been saved." });
+    } catch (err: any) {
+      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-foreground/20 border-t-foreground rounded-full animate-spin" />
-          <span className="text-sm text-muted-foreground">Loading...</span>
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">Loading file...</span>
         </div>
       </div>
     );
   }
 
-  const fileUrl = `/api/file?path=${encodeURIComponent(path)}`;
+  const session = api.getToken();
+  const fileUrl = `/api/file?path=${encodeURIComponent(path)}&session=${session}`;
 
   return (
     <div className="flex flex-col h-full bg-card rounded-[2rem] border border-border/50 shadow-2xl overflow-hidden relative">
@@ -77,6 +109,18 @@ export const FileViewer: React.FC<FileViewerProps> = ({ path, name, onClose }) =
         </div>
 
         <div className="flex items-center gap-2">
+          {isText && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleSave}
+              disabled={saving}
+              className="rounded-xl px-4 h-10 font-bold shadow-sm transition-all gap-2"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -89,24 +133,32 @@ export const FileViewer: React.FC<FileViewerProps> = ({ path, name, onClose }) =
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 relative z-10 flex items-center justify-center p-6 md:p-12">
+      <div className={`flex-1 min-h-0 relative z-10 flex items-center justify-center ${isText ? '' : 'p-6 md:p-12'}`}>
         {isImage ? (
-          <div className="relative group max-w-full max-h-full">
+          <div className="relative group w-full h-full flex items-center justify-center overflow-auto bg-black/5 rounded-b-[2rem]">
             <img
               src={fileUrl}
               alt={name}
-              className="max-w-full max-h-full rounded-2xl object-contain shadow-2xl ring-1 ring-black/5"
+              className="max-w-full max-h-full object-contain shadow-2xl transition-transform hover:scale-105 cursor-zoom-in"
+              onClick={() => window.open(fileUrl, '_blank')}
             />
           </div>
         ) : isVideo ? (
-          <div className="w-full max-w-5xl aspect-video bg-black rounded-3xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+          <div className="w-full h-full flex flex-col bg-black rounded-b-[2rem] overflow-hidden shadow-2xl relative">
             <video
               src={fileUrl}
               controls
               autoPlay
-              className="w-full h-full"
+              className="w-full h-full object-contain"
             />
           </div>
+        ) : isText ? (
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className="w-full h-full p-6 bg-transparent border-none resize-none focus:outline-none focus:ring-0 font-mono text-sm leading-relaxed"
+            spellCheck={false}
+          />
         ) : (
           <div className="flex flex-col items-center gap-8 text-center max-w-md animate-in fade-in zoom-in duration-300">
             <div className="relative">
@@ -150,4 +202,3 @@ export const FileViewer: React.FC<FileViewerProps> = ({ path, name, onClose }) =
     </div>
   );
 };
-
