@@ -28,20 +28,22 @@ By default:
 
 Runtime configuration is controlled by flags or environment variables.
 
-| Setting | Flag | Environment variable | Default |
-| --- | --- | --- | --- |
-| UI/API port | `-api-port` | `HUBFLY_API_PORT` | `10015` |
-| Management port | `-mgmt-port` | `HUBFLY_MGMT_PORT` | `10014` |
-| Demo directory | `-demo-dir` | `HUBFLY_DEMO_DIR` | `./demo` |
-| Built UI directory | `-ui-dir` | `HUBFLY_UI_DIR` | `./frontend/dist` |
-| Maximum upload bytes | `-max-upload-bytes` | `HUBFLY_MAX_UPLOAD_BYTES` | `104857600` |
+| Setting                      | CLI Flag            | Environment Variable      | Default Value     |
+| ---------------------------- | ------------------- | ------------------------- | ----------------- |
+| UI/API port                  | `-api-port`         | `HUBFLY_API_PORT`         | `10015`           |
+| Management port              | `-mgmt-port`        | `HUBFLY_MGMT_PORT`        | `10014`           |
+| Demo directory               | `-demo-dir`         | `HUBFLY_DEMO_DIR`         | `./demo`          |
+| Built UI directory           | `-ui-dir`           | `HUBFLY_UI_DIR`           | `./frontend/dist` |
+| Maximum upload size in bytes | `-max-upload-bytes` | `HUBFLY_MAX_UPLOAD_BYTES` | `104857600`       |
+
 
 ## Base URLs
 
-| Surface | Base URL |
-| --- | --- |
-| UI/API | `http://<host>:10015` |
+| Surface        | Base URL              |
+| -------------- | --------------------- |
+| UI and API     | `http://<host>:10015` |
 | Management API | `http://<host>:10014` |
+
 
 All UI/API endpoints are rooted at `/api/...`.
 
@@ -80,17 +82,18 @@ If no valid session is found:
 
 Demo mode permissions:
 
-| Capability | Value |
-| --- | --- |
-| Read files | allowed |
-| List directories | allowed |
-| Upload | denied |
-| Edit files | denied |
-| Delete files | denied |
-| Create directories | denied |
-| Rename | denied |
-| Zip | denied |
-| Extract | denied |
+| Capability                  | Access  |
+| --------------------------- | ------- |
+| Read files                  | Allowed |
+| List directories            | Allowed |
+| Upload files                | Denied  |
+| Edit files                  | Denied  |
+| Delete files                | Denied  |
+| Create directories          | Denied  |
+| Rename files or directories | Denied  |
+| Create ZIP archives         | Denied  |
+| Extract archives            | Denied  |
+
 
 ### Session permissions
 
@@ -111,28 +114,32 @@ Behavior:
 
 ### Common request content types
 
-| Endpoint type | Content type |
-| --- | --- |
-| JSON request bodies | `application/json` |
-| File upload | `multipart/form-data` |
-| Raw file write | any raw body, typically `text/plain` or `application/octet-stream` |
+| Endpoint Type       | Content Type                                                       |
+| ------------------- | ------------------------------------------------------------------ |
+| JSON request bodies | `application/json`                                                 |
+| File uploads        | `multipart/form-data`                                              |
+| Raw file writes     | Any raw body, typically `text/plain` or `application/octet-stream` |
+
 
 ### Common response content types
 
-| Response type | Content type |
-| --- | --- |
-| JSON responses | `application/json` |
-| File download/view | no forced content type; served as raw bytes |
-| Errors from `http.Error` | `text/plain; charset=utf-8` |
+| Response Type                   | Content Type                          |
+| ------------------------------- | ------------------------------------- |
+| JSON responses                  | `application/json`                    |
+| File downloads and previews     | Raw bytes with no forced content type |
+| Errors returned by `http.Error` | `text/plain; charset=utf-8`           |
+
 
 ## Request Size Limits
 
 The server enforces these request size limits:
 
-| Limit | Value | Applies to |
-| --- | --- | --- |
-| JSON body limit | `1 MiB` | `/api/mkdir`, `/api/rename`, `/api/delete`, `/api/zip`, `/api/extract` |
-| Upload body limit | `100 MiB` by default, configurable with `HUBFLY_MAX_UPLOAD_BYTES`; `0` disables the cap | `/api/upload` |
+| Limit | Applies To | Value |
+
+| JSON body | `/api/mkdir`, `/api/rename`, `/api/delete`, `/api/zip`, `/api/extract` | `1 MiB` |
+| Upload body | `/api/upload` | Default: `100 MiB` |
+| Upload configuration | `/api/upload` | Set with `HUBFLY_MAX_UPLOAD_BYTES` |
+| Disable upload limit | `/api/upload` | Set `HUBFLY_MAX_UPLOAD_BYTES=0` |
 
 Notes:
 
