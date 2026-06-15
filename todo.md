@@ -25,6 +25,7 @@
 - [x] Implement Demo mode handling when no session is provided.
 - [x] Integrate servers in `main.go` and add CORS support.
 
+
 ## 3. Frontend Implementation (React)
 - [x] Set up basic styling (Tailwind CSS).
 - [x] Integrate Shadcn UI components.
@@ -39,7 +40,6 @@
 - [x] Implement File Editor / Preview (Advanced layout, save feedback).
 - [x] Implement Drag-and-drop upload (Visual feedback).
 - [x] Implement Search (Focused, immediate).
-
 ## 4. Final Polish & Testing
 - [x] Verify security rules (Path traversal blocking).
 - [x] Verify UI pixel-perfect spacing and smooth transitions.

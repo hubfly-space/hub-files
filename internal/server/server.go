@@ -46,15 +46,15 @@ func maxBytesMiddleware(n int64) func(http.Handler) http.Handler {
 	}
 }
 
-func methodHandler(method string, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != method {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		next(w, r)
-	}
-}
+// func methodHandler(method string, next http.HandlerFunc) http.HandlerFunc {
+// 	return func(w http.ResponseWriter, r *http.Request) {
+// 		if r.Method != method {
+// 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// 			return
+// 		}
+// 		next(w, r)
+// 	}
+// }
 
 func methodHandlers(methods []string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -395,6 +395,31 @@ func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Server) handleTouch(w http.ResponseWriter, r *http.Request) {
+	if s.checkReadOnly(w, r) {
+		return
+	}
+	root := r.Header.Get("X-Session-Root")
+
+	var req struct {
+		Path string `json:"path"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request Body", http.StatusBadRequest)
+		return
+	}
+
+	err := filesystem.Touch(root, req.Path)
+	if err != nil {
+		log.Printf("Touch error: %v", err)
+		writeFileSystemError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+}
 func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 	if s.checkReadOnly(w, r) {
 		return
@@ -604,8 +629,8 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// UI API
-	mux.HandleFunc("/api/list", s.authMiddleware(methodHandler(http.MethodGet, s.handleList)))
-	mux.HandleFunc("/api/storage", s.authMiddleware(methodHandler(http.MethodGet, s.handleStorage)))
+	mux.HandleFunc("/api/list", s.authMiddleware(methodHandlers([]string{http.MethodGet}, s.handleList)))
+	mux.HandleFunc("/api/storage", s.authMiddleware(methodHandlers([]string{http.MethodGet}, s.handleStorage)))
 	mux.HandleFunc("/api/file", s.authMiddleware(methodHandlers([]string{http.MethodGet, http.MethodPut}, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			s.handleGetFile(w, r)
@@ -613,13 +638,14 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 		}
 		s.handlePutFile(w, r)
 	})))
-	mux.HandleFunc("/api/upload", s.authMiddleware(methodHandler(http.MethodPost, s.handleUpload)))
+	mux.HandleFunc("/api/upload", s.authMiddleware(methodHandlers([]string{http.MethodPost}, s.handleUpload)))
 	// JSON endpoints with max bytes middleware
-	mux.Handle("/api/mkdir", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandler(http.MethodPost, s.handleMkdir))))
-	mux.Handle("/api/rename", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandler(http.MethodPost, s.handleRename))))
-	mux.Handle("/api/delete", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandler(http.MethodDelete, s.handleDelete))))
-	mux.Handle("/api/zip", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandler(http.MethodPost, s.handleZip))))
-	mux.Handle("/api/extract", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandler(http.MethodPost, s.handleExtract))))
+	mux.Handle("/api/mkdir", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandlers([]string{http.MethodPost}, s.handleMkdir))))
+	mux.Handle("/api/rename", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandlers([]string{http.MethodPost}, s.handleRename))))
+	mux.Handle("/api/delete", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandlers([]string{http.MethodDelete}, s.handleDelete))))
+	mux.Handle("/api/zip", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandlers([]string{http.MethodPost}, s.handleZip))))
+	mux.Handle("/api/extract", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandlers([]string{http.MethodPost}, s.handleExtract))))
+	mux.Handle("/api/touch", maxBytesMiddleware(MaxRequestSize)(s.authMiddleware(methodHandlers([]string{http.MethodPost}, s.handleTouch))))
 	mux.HandleFunc("/", s.handleUI)
 
 	return mux
@@ -627,6 +653,6 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 
 func (s *Server) SetupManagementRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/sessions", methodHandler(http.MethodPost, s.handleCreateSession))
+	mux.HandleFunc("/sessions", methodHandlers([]string{http.MethodPost}, s.handleCreateSession))
 	return mux
 }
