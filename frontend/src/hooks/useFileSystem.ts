@@ -45,37 +45,23 @@ export function useFileSystem() {
   const refresh = () => loadFiles();
 
   const deleteItem = async (itemName: string) => {
-    try {
-      const itemPath = path === "/" ? `/${itemName}` : `${path}/${itemName}`;
-      await api.delete(itemPath);
-      refresh();
-    } catch (err: any) {
-      console.error(err);
-      throw err; // Re-throw so caller can show toast
-    }
+    const itemPath = path === "/" ? `/${itemName}` : `${path}/${itemName}`;
+    await api.delete(itemPath);
+    refresh();
   };
 
   const renameItem = async (oldName: string, newName: string) => {
-    try {
-      const oldPath = path === "/" ? `/${oldName}` : `${path}/${oldName}`;
-      const newPath = path === "/" ? `/${newName}` : `${path}/${newName}`;
-      await api.rename(oldPath, newPath);
-      refresh();
-    } catch (err: any) {
-      console.error(err);
-      throw err;
-    }
+    const oldPath = path === "/" ? `/${oldName}` : `${path}/${oldName}`;
+    const newPath = path === "/" ? `/${newName}` : `${path}/${newName}`;
+
+    await api.rename(oldPath, newPath);
+    refresh();
   };
 
   const createFolder = async (name: string) => {
-    try {
-      const folderPath = path === "/" ? `/${name}` : `${path}/${name}`;
-      await api.mkdir(folderPath);
-      refresh();
-    } catch (err: any) {
-      console.error(err);
-      throw err;
-    }
+    const folderPath = path === "/" ? `/${name}` : `${path}/${name}`;
+    await api.mkdir(folderPath);
+    refresh();
   };
 
   const createFile = async (name: string) => {
@@ -92,31 +78,20 @@ export function useFileSystem() {
   };
 
   const zipItem = async (itemName: string) => {
-    try {
-      const itemPath = path === "/" ? `/${itemName}` : `${path}/${itemName}`;
-      // Only append .zip if not already a zip file
-      const targetPath = itemName.endsWith(".zip")
-        ? itemPath
-        : `${itemPath}.zip`;
-      await api.zip(itemPath, targetPath);
-      refresh();
-    } catch (err: any) {
-      console.error(err);
-      throw err;
-    }
+    const itemPath = path === "/" ? `/${itemName}` : `${path}/${itemName}`;
+    // Only append .zip if not already a zip file
+    const targetPath = itemName.endsWith(".zip") ? itemPath : `${itemPath}.zip`;
+    await api.zip(itemPath, targetPath);
+    refresh();
   };
 
   const extractItem = async (itemName: string) => {
     if (!itemName.endsWith(".zip")) return;
-    try {
-      const itemPath = path === "/" ? `/${itemName}` : `${path}/${itemName}`;
-      const targetPath = path;
-      await api.extract(itemPath, targetPath);
-      refresh();
-    } catch (err: any) {
-      console.error(err);
-      throw err;
-    }
+
+    const itemPath = path === "/" ? `/${itemName}` : `${path}/${itemName}`;
+    const targetPath = path;
+    await api.extract(itemPath, targetPath);
+    refresh();
   };
 
   return {
