@@ -1,9 +1,11 @@
 package filesystem
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -356,5 +358,156 @@ func TestMkdir(t *testing.T) {
 	newDir := filepath.Join(tmpDir, "newdir")
 	if _, err := os.Stat(newDir); err != nil {
 		t.Error("Created directory should exist")
+	}
+}
+
+func testOwnershipFromPath(t *testing.T, path string) *Ownership {
+	t.Helper()
+
+	ownership, err := ownershipFromStat(path)
+	if err != nil {
+		t.Fatalf("ownershipFromStat() error = %v", err)
+	}
+
+	return ownership
+}
+
+func TestCreateFileWithAllOwnershipCreatesFile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "test-create-file-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ownership := testOwnershipFromPath(t, tmpDir)
+
+	filePath := filepath.Join(tmpDir, "uploads", "images", "avatar.txt")
+
+	err = CreateFileWithAllOwnership(filePath, 0644, ownership)
+	if err != nil {
+		t.Fatalf("CreateFileWithAllOwnership() error = %v", err)
+	}
+
+	info, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("created file does not exist: %v", err)
+	}
+
+	if info.IsDir() {
+		t.Fatal("created path is a directory, want file")
+	}
+
+	parent := filepath.Dir(filePath)
+	parentInfo, err := os.Stat(parent)
+	if err != nil {
+		t.Fatalf("parent directory was not created: %v", err)
+	}
+
+	if !parentInfo.IsDir() {
+		t.Fatal("parent path exists but is not a directory")
+	}
+}
+
+func TestCreateFileWithAllOwnershipExistingFile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "test-create-existing-file-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ownership := testOwnershipFromPath(t, tmpDir)
+
+	filePath := filepath.Join(tmpDir, "existing.txt")
+	originalContent := []byte("do not destroy me")
+
+	if err := os.WriteFile(filePath, originalContent, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = CreateFileWithAllOwnership(filePath, 0644, ownership)
+	if err != nil {
+		t.Fatalf("CreateFileWithAllOwnership() error = %v", err)
+	}
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(content) != string(originalContent) {
+		t.Fatalf("file content changed = %q, want %q", string(content), string(originalContent))
+	}
+}
+
+func TestCreateFileWithAllOwnershipRejectsDirectory(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "test-create-file-reject-dir-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ownership := testOwnershipFromPath(t, tmpDir)
+
+	dirPath := filepath.Join(tmpDir, "already-a-dir")
+	if err := os.MkdirAll(dirPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err = CreateFileWithAllOwnership(dirPath, 0644, ownership)
+	if err == nil {
+		t.Fatal("CreateFileWithAllOwnership() expected error for directory path")
+	}
+
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("error type = %T, want *os.PathError", err)
+	}
+
+	if !errors.Is(pathErr.Err, syscall.EISDIR) {
+		t.Fatalf("PathError.Err = %v, want %v", pathErr.Err, syscall.EISDIR)
+	}
+}
+
+func TestCreateFileWithAllOwnershipParentComponentIsFile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "test-create-file-parent-is-file-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ownership := testOwnershipFromPath(t, tmpDir)
+
+	blocker := filepath.Join(tmpDir, "blocker")
+	if err := os.WriteFile(blocker, []byte("I am a file, not a folder"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	filePath := filepath.Join(blocker, "child.txt")
+
+	err = CreateFileWithAllOwnership(filePath, 0644, ownership)
+	if err == nil {
+		t.Fatal("CreateFileWithAllOwnership() expected error when parent component is a file")
+	}
+}
+
+func TestCreateFileWithAllOwnershipCleansPath(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "test-create-file-clean-path-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ownership := testOwnershipFromPath(t, tmpDir)
+
+	dirtyPath := filepath.Join(tmpDir, "uploads", ".", "images", "..", "file.txt")
+	cleanPath := filepath.Clean(dirtyPath)
+
+	err = CreateFileWithAllOwnership(dirtyPath, 0644, ownership)
+	if err != nil {
+		t.Fatalf("CreateFileWithAllOwnership() error = %v", err)
+	}
+
+	if _, err := os.Stat(cleanPath); err != nil {
+		t.Fatalf("cleaned file path does not exist: %v", err)
 	}
 }

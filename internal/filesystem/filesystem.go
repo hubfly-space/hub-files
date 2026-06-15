@@ -46,14 +46,14 @@ func SafePath(root, subPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	absRoot = filepath.Clean(absRoot)
+	// absRoot = filepath.Clean(absRoot) // i just think its redudant as the filepath.Abs already returning clean result. i dont know just tryna be smart with the coding gods
 
 	finalPath := filepath.Join(absRoot, filepath.FromSlash(subPath))
 	absFinal, err := filepath.Abs(finalPath)
 	if err != nil {
 		return "", err
 	}
-	absFinal = filepath.Clean(absFinal)
+	// absFinal = filepath.Clean(absFinal) //same thing as clean above still redudant
 
 	if !pathWithinRoot(absRoot, absFinal) {
 		return "", ErrUnauthorized
@@ -68,13 +68,21 @@ func SafePath(root, subPath string) (string, error) {
 		if err2 != nil {
 			return "", ErrUnauthorized
 		}
-		if !pathWithinRoot(absRoot, filepath.Clean(resolvedParent)) {
+		// if !pathWithinRoot(absRoot, filepath.Clean(resolvedParent)) {
+		// 	return "", ErrUnauthorized
+		// } filepath.Clean is redudant as EvalSymlinks performs clean
+
+		if !pathWithinRoot(absRoot, resolvedParent) {
 			return "", ErrUnauthorized
 		}
 		return absFinal, nil
 	}
 
-	if !pathWithinRoot(absRoot, filepath.Clean(resolved)) {
+	// if !pathWithinRoot(absRoot, filepath.Clean(resolved)) {
+	// 	return "", ErrUnauthorized
+	// } filepath.Clean is redudant as EvalSymlinks performs clean
+
+	if !pathWithinRoot(absRoot, resolved) {
 		return "", ErrUnauthorized
 	}
 
@@ -225,12 +233,45 @@ func CreateDirAllWithOwnership(path string, perm os.FileMode, ownership *Ownersh
 
 	if err := os.Mkdir(cleanPath, perm); err != nil {
 		if os.IsExist(err) {
-			return nil
+
 		}
 		return err
 	}
 
 	return ApplyOwnership(cleanPath, ownership)
+}
+
+func CreateFileWithAllOwnership(path string, perm os.FileMode, owneship *Ownership) error {
+	cleanPath := filepath.Clean(path)
+	info, err := os.Stat(cleanPath)
+	if err == nil {
+		if info.IsDir() {
+			return &os.PathError{Op: "Touch", Path: cleanPath, Err: syscall.EISDIR}
+		}
+
+	}
+	if !os.IsNotExist(err) {
+		return err
+	}
+
+	parent := filepath.Dir(path)
+
+	if err := CreateDirAllWithOwnership(parent, 0755, owneship); err != nil {
+		return err
+	}
+
+	file, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_EXCL|os.O_EXCL|os.O_WRONLY, perm)
+	if err != nil {
+		if os.IsExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return ApplyOwnership(cleanPath, owneship)
 }
 
 func ReadFile(root, subPath string) (io.ReadCloser, error) {
@@ -362,4 +403,20 @@ func Mkdir(root, subPath string) error {
 	}
 
 	return CreateDirAllWithOwnership(path, 0755, ownership)
+}
+
+func Touch(root, subPath string) error {
+	path, err := SafePath(root, subPath)
+	if err != nil {
+		return err
+	}
+
+	ownership, err := DesiredOwnershipForPath(path)
+
+	if err != nil {
+		return err
+	}
+
+	return CreateFileWithAllOwnership(path, 0644, ownership)
+
 }
