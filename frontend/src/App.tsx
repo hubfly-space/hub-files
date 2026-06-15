@@ -144,7 +144,8 @@ function App() {
           const elapsed = (now - startTime) / 1000;
           const speedBytes = elapsed > 0 ? loaded / elapsed : 0;
           const remainingBytes = Math.max(0, total - loaded);
-          const eta = speedBytes > 0 ? formatEta(remainingBytes / speedBytes) : "";
+          const eta =
+            speedBytes > 0 ? formatEta(remainingBytes / speedBytes) : "";
 
           setActiveUploads((prev) =>
             prev.map((u) =>
@@ -188,13 +189,16 @@ function App() {
     };
 
     const queue = [...uploads];
-    const workers = Array.from({ length: Math.min(2, queue.length) }, async () => {
-      for (;;) {
-        const next = queue.shift();
-        if (!next) return;
-        await uploadOne(next);
-      }
-    });
+    const workers = Array.from(
+      { length: Math.min(2, queue.length) },
+      async () => {
+        for (;;) {
+          const next = queue.shift();
+          if (!next) return;
+          await uploadOne(next);
+        }
+      },
+    );
 
     await Promise.all(workers);
     if (hasSuccessfulUpload) refresh();
@@ -298,10 +302,14 @@ function App() {
 
   const handleMove = async (sourceName: string, targetFolderName: string) => {
     if (sourceName === targetFolderName) return;
-    
-    const sourcePath = path === '/' ? `/${sourceName}` : `${path}/${sourceName}`;
-    const targetPath = path === '/' ? `/${targetFolderName}/${sourceName}` : `${path}/${targetFolderName}/${sourceName}`;
-    
+
+    const sourcePath =
+      path === "/" ? `/${sourceName}` : `${path}/${sourceName}`;
+    const targetPath =
+      path === "/"
+        ? `/${targetFolderName}/${sourceName}`
+        : `${path}/${targetFolderName}/${sourceName}`;
+
     try {
       await api.rename(sourcePath, targetPath);
       toast({
@@ -309,10 +317,10 @@ function App() {
         description: `Moved ${sourceName} into ${targetFolderName}`,
       });
       refresh();
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Move Failed",
-        description: err.message,
+        description: err instanceof Error ? err.message : "error moving",
         variant: "destructive",
       });
     }
@@ -347,20 +355,27 @@ function App() {
                   <div className="hidden lg:flex items-center gap-4 bg-secondary/40 px-3 py-1.5 rounded-full border border-border/50">
                     <div className="flex flex-col items-end">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Storage</span>
-                        <span className="text-xs font-semibold">{storage.usedPercent.toFixed(0)}%</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Storage
+                        </span>
+                        <span className="text-xs font-semibold">
+                          {storage.usedPercent.toFixed(0)}%
+                        </span>
                       </div>
                       <p className="text-[10px] text-muted-foreground font-medium">
-                        {formatBytes(storage.usedBytes)} of {formatBytes(storage.totalBytes)}
+                        {formatBytes(storage.usedBytes)} of{" "}
+                        {formatBytes(storage.totalBytes)}
                       </p>
                     </div>
                     <div className="w-20 h-1.5 rounded-full bg-border/50 overflow-hidden">
-                      <motion.div 
+                      <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${storage.usedPercent}%` }}
                         className={cn(
                           "h-full rounded-full transition-all",
-                          storage.usedPercent > 90 ? "bg-destructive" : "bg-primary"
+                          storage.usedPercent > 90
+                            ? "bg-destructive"
+                            : "bg-primary",
                         )}
                       />
                     </div>
@@ -428,14 +443,16 @@ function App() {
                 </div>
                 <div className="text-center">
                   <p className="text-lg font-bold">Ready to upload</p>
-                  <p className="text-sm text-muted-foreground">Drop your files here to start</p>
+                  <p className="text-sm text-muted-foreground">
+                    Drop your files here to start
+                  </p>
                 </div>
               </motion.div>
             </div>
           )}
 
           {openFile ? (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="h-full p-6 max-w-[1600px] mx-auto w-full"
@@ -478,12 +495,18 @@ function App() {
                         <AlertCircle className="w-10 h-10 text-destructive" />
                       </div>
                       <div className="text-center space-y-2">
-                        <h3 className="text-xl font-bold tracking-tight">Access Denied</h3>
+                        <h3 className="text-xl font-bold tracking-tight">
+                          Access Denied
+                        </h3>
                         <p className="text-sm text-muted-foreground max-w-xs mx-auto leading-relaxed">
                           {error}
                         </p>
                       </div>
-                      <Button variant="secondary" className="rounded-xl px-8" onClick={refresh}>
+                      <Button
+                        variant="secondary"
+                        className="rounded-xl px-8"
+                        onClick={refresh}
+                      >
                         Try Again
                       </Button>
                     </motion.div>
@@ -515,7 +538,9 @@ function App() {
                       layout
                       className={cn(
                         "flex-1",
-                        viewMode === "list" ? "space-y-1.5" : "file-grid-layout",
+                        viewMode === "list"
+                          ? "space-y-1.5"
+                          : "file-grid-layout",
                       )}
                     >
                       {filteredFiles.map((file) => (
@@ -733,9 +758,11 @@ function App() {
       </Dialog>
 
       <Toaster />
-      <UploadProgress 
-        uploads={activeUploads} 
-        onClear={(id) => setActiveUploads(prev => prev.filter(u => u.id !== id))}
+      <UploadProgress
+        uploads={activeUploads}
+        onClear={(id) =>
+          setActiveUploads((prev) => prev.filter((u) => u.id !== id))
+        }
         onClearAll={() => setActiveUploads([])}
       />
     </div>

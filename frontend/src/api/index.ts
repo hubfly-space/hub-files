@@ -122,6 +122,15 @@ export const api = {
     if (!res.ok) throw new Error(await res.text());
   },
 
+  touch: async (path: string): Promise<void> =>{
+    const res = await fetch(`${API_BASE}/touch`, {
+      method: "POST",
+      headers: api.headers(),
+      body:JSON.stringify({path})
+    })
+    if (!res.ok) throw new Error(await res.text());
+},
+
   rename: async (oldPath: string, newPath: string): Promise<void> => {
     const res = await fetch(`${API_BASE}/rename`, {
       method: "POST",
