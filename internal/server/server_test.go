@@ -6,6 +6,7 @@ import (
 	"hubfly-files/internal/config"
 	"hubfly-files/internal/filesystem"
 	"hubfly-files/internal/sessions"
+	"hubfly-files/internal/sqlite"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -29,18 +30,32 @@ func newTestServer(t *testing.T) (*Server, string) {
 		DemoDir:        tmpDir,
 		UIDir:          filepath.Join(tmpDir, "ui"),
 	}
+
 	if err := os.MkdirAll(cfg.UIDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(cfg.UIDir, "index.html"), []byte("<!doctype html>"), 0644); err != nil {
+
+	if err := os.WriteFile(
+		filepath.Join(cfg.UIDir, "index.html"),
+		[]byte("<!doctype html>"),
+		0644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// ✅ create test sqlite db
+	dbPath := filepath.Join(tmpDir, "test.db")
+	store, err := sqlite.New(dbPath)
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.Cleanup(func() {
+		_ = store.Close()
 		_ = os.RemoveAll(tmpDir)
 	})
 
-	return NewServer(cfg, sessions.NewStore()), tmpDir
+	return NewServer(cfg, sessions.NewStore(), store), tmpDir
 }
 
 func createTestSession(t *testing.T, srv *Server, root string, allowUpload bool) string {
@@ -104,6 +119,7 @@ func TestCreateSessionReturnsRateLimitExceeded(t *testing.T) {
 		"allowEdit":   true,
 		"allowDelete": true,
 	}
+
 	payload, err := json.Marshal(body)
 	if err != nil {
 		t.Fatal(err)
@@ -113,13 +129,15 @@ func TestCreateSessionReturnsRateLimitExceeded(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/sessions", bytes.NewReader(payload))
 		rec := httptest.NewRecorder()
 		srv.SetupManagementRoutes().ServeHTTP(rec, req)
+
 		if rec.Code != http.StatusOK {
-			t.Fatalf("setup request %d status = %d, want %d", i, rec.Code, http.StatusOK)
+			t.Fatalf("setup request %d status = %d", i, rec.Code)
 		}
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/sessions", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
+
 	srv.SetupManagementRoutes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusTooManyRequests {
@@ -136,50 +154,53 @@ func TestDemoStorageReturnsFakeValues(t *testing.T) {
 	srv.SetupRoutes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+		t.Fatalf("status = %d", rec.Code)
 	}
 
 	var storage filesystem.StorageInfo
 	if err := json.NewDecoder(rec.Body).Decode(&storage); err != nil {
-		t.Fatalf("decode error = %v", err)
+		t.Fatal(err)
 	}
 
 	if storage.TotalBytes != DemoTotalBytes {
-		t.Fatalf("totalBytes = %d, want %d", storage.TotalBytes, DemoTotalBytes)
+		t.Fatalf("totalBytes = %d", storage.TotalBytes)
 	}
 	if storage.UsedBytes != DemoUsedBytes {
-		t.Fatalf("usedBytes = %d, want %d", storage.UsedBytes, DemoUsedBytes)
+		t.Fatalf("usedBytes = %d", storage.UsedBytes)
 	}
 	if storage.AvailableBytes != DemoTotalBytes-DemoUsedBytes {
-		t.Fatalf("availableBytes = %d, want %d", storage.AvailableBytes, DemoTotalBytes-DemoUsedBytes)
+		t.Fatalf("availableBytes mismatch")
 	}
 	if storage.UsedPercent != 25 {
-		t.Fatalf("usedPercent = %v, want 25", storage.UsedPercent)
+		t.Fatalf("usedPercent = %v", storage.UsedPercent)
 	}
 }
 
 func TestRawUploadAcceptsLargeFile(t *testing.T) {
 	srv, tmpDir := newTestServer(t)
 	token := createTestSession(t, srv, tmpDir, true)
+
 	body := bytes.Repeat([]byte("a"), 11<<20)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/upload?path=/&filename=large.bin", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/octet-stream")
+
 	rec := httptest.NewRecorder()
 
 	srv.SetupRoutes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body = %q", rec.Code, http.StatusOK, rec.Body.String())
+		t.Fatalf("status = %d", rec.Code)
 	}
 
 	info, err := os.Stat(filepath.Join(tmpDir, "large.bin"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if info.Size() != int64(len(body)) {
-		t.Fatalf("uploaded size = %d, want %d", info.Size(), len(body))
+		t.Fatalf("size mismatch")
 	}
 }
 
@@ -191,12 +212,13 @@ func TestRawUploadRejectsOversizedBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/upload?path=/&filename=too-large.bin", strings.NewReader("12345"))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/octet-stream")
+
 	rec := httptest.NewRecorder()
 
 	srv.SetupRoutes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+		t.Fatalf("status = %d", rec.Code)
 	}
 }
 
@@ -207,18 +229,20 @@ func TestRawUploadRejectsUnsafeFilename(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/upload?path=/&filename=../evil.txt", strings.NewReader("x"))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/octet-stream")
+
 	rec := httptest.NewRecorder()
 
 	srv.SetupRoutes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		t.Fatalf("status = %d", rec.Code)
 	}
 }
 
 func TestRawUploadDoesNotReplaceTargetOnInterruptedBody(t *testing.T) {
 	srv, tmpDir := newTestServer(t)
 	token := createTestSession(t, srv, tmpDir, true)
+
 	targetPath := filepath.Join(tmpDir, "existing.txt")
 	if err := os.WriteFile(targetPath, []byte("original"), 0644); err != nil {
 		t.Fatal(err)
@@ -227,19 +251,22 @@ func TestRawUploadDoesNotReplaceTargetOnInterruptedBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/upload?path=/&filename=existing.txt", errReader{})
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/octet-stream")
+
 	rec := httptest.NewRecorder()
 
 	srv.SetupRoutes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+		t.Fatalf("status = %d", rec.Code)
 	}
+
 	content, err := os.ReadFile(targetPath)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if string(content) != "original" {
-		t.Fatalf("target content = %q, want %q", string(content), "original")
+		t.Fatalf("file was overwritten")
 	}
 }
 

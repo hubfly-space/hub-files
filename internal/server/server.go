@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -27,12 +28,14 @@ const (
 type Server struct {
 	Config   *config.Config
 	Sessions *sessions.Store
+	// Store    *sqlite.Storage
 }
 
 func NewServer(cfg *config.Config, store *sessions.Store) *Server {
 	return &Server{
 		Config:   cfg,
 		Sessions: store,
+		// Store:    db,
 	}
 }
 
@@ -58,12 +61,13 @@ func maxBytesMiddleware(n int64) func(http.Handler) http.Handler {
 
 func methodHandlers(methods []string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		for _, method := range methods {
-			if r.Method == method {
-				next(w, r)
-				return
-			}
+
+		if slices.Contains(methods, r.Method) {
+			next(w, r)
+			return
+
 		}
+
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
