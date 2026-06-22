@@ -15,13 +15,25 @@ var (
 )
 
 type Session struct {
-	Code        string    `json:"sessionCode"`
-	Root        string    `json:"root"`
-	ExpiresAt   time.Time `json:"expiresAt"`
-	ReadOnly    bool      `json:"readonly"`
-	AllowUpload bool      `json:"allowUpload"`
-	AllowEdit   bool      `json:"allowEdit"`
-	AllowDelete bool      `json:"allowDelete"`
+	Code        string     `json:"sessionCode"`
+	Root        string     `json:"root"`
+	ExpiresAt   time.Time  `json:"expiresAt"`
+	ReadOnly    bool       `json:"readonly"`
+	AllowUpload bool       `json:"allowUpload"`
+	AllowEdit   bool       `json:"allowEdit"`
+	AllowDelete bool       `json:"allowDelete"`
+	SMB         *SMBConfig `json:"-"`
+}
+
+type SMBConfig struct {
+	Host        string
+	Port        int
+	Share       string
+	BasePath    string
+	Username    string
+	Password    string
+	Domain      string
+	Workstation string
 }
 
 type Store struct {
@@ -43,6 +55,14 @@ func NewStore() *Store {
 }
 
 func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool) (*Session, error) {
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil)
+}
+
+func (s *Store) CreateSMBSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, smb *SMBConfig) (*Session, error) {
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, smb)
+}
+
+func (s *Store) createSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, smb *SMBConfig) (*Session, error) {
 	// Rate limiting: max 10 session creations per minute
 	s.createMu.Lock()
 	now := time.Now()
@@ -75,6 +95,7 @@ func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool, allowU
 		AllowUpload: allowUpload,
 		AllowEdit:   allowEdit,
 		AllowDelete: allowDelete,
+		SMB:         smb,
 	}
 
 	s.mu.Lock()

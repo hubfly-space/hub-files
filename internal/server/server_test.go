@@ -6,7 +6,6 @@ import (
 	"hubfly-files/internal/config"
 	"hubfly-files/internal/filesystem"
 	"hubfly-files/internal/sessions"
-	"hubfly-files/internal/sqlite"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -43,19 +42,11 @@ func newTestServer(t *testing.T) (*Server, string) {
 		t.Fatal(err)
 	}
 
-	// ✅ create test sqlite db
-	dbPath := filepath.Join(tmpDir, "test.db")
-	store, err := sqlite.New(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	t.Cleanup(func() {
-		_ = store.Close()
 		_ = os.RemoveAll(tmpDir)
 	})
 
-	return NewServer(cfg, sessions.NewStore(), store), tmpDir
+	return NewServer(cfg, sessions.NewStore()), tmpDir
 }
 
 func createTestSession(t *testing.T, srv *Server, root string, allowUpload bool) string {
