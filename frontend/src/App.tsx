@@ -28,6 +28,7 @@ function App() {
     loading,
     error,
     storage,
+    session,
     viewMode,
     setViewMode,
     navigate,
@@ -49,6 +50,7 @@ function App() {
 
   const [search, setSearch] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [hostMounting, setHostMounting] = useState(false);
 
   const [renameDialog, setRenameDialog] = useState<{
     open: boolean;
@@ -174,6 +176,25 @@ function App() {
     toast({ title: "Archived", description: `${zipped} items zipped.` });
   };
 
+  const handleHostMount = async () => {
+    setHostMounting(true);
+    try {
+      const result = await api.hostMount();
+      toast({
+        title: result.alreadyMounted ? "Already mounted" : "SMB mounted",
+        description: `Available on this machine at ${result.mountPath}`,
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "Mount failed",
+        description: err instanceof Error ? err.message : "Unable to mount SMB share",
+        variant: "destructive",
+      });
+    } finally {
+      setHostMounting(false);
+    }
+  };
+
   const handleMove = async (sourceName: string, targetFolderName: string) => {
     if (sourceName === targetFolderName) return;
 
@@ -227,6 +248,9 @@ function App() {
             onClearSelection={clearSelection}
             fileInputRef={fileInputRef}
             onFileChange={handleFileChange}
+            canHostMount={session?.type === "smb" && session.canHostMount}
+            hostMounting={hostMounting}
+            onHostMount={handleHostMount}
           />
         )}
 
