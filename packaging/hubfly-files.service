@@ -1,5 +1,5 @@
 [Unit]
-Description=HubFly Files
+Description=HubFiles
 After=network-online.target
 Wants=network-online.target
 
