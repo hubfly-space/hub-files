@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
-import type { FileInfo, StorageInfo } from "../api";
+import type { FileInfo, SessionInfo, StorageInfo } from "../api";
 
 export function useFileSystem() {
   const [path, setPath] = useState("/");
@@ -9,12 +9,17 @@ export function useFileSystem() {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [storage, setStorage] = useState<StorageInfo | null>(null);
+  const [session, setSession] = useState<SessionInfo | null>(null);
 
   const loadFiles = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.list(path);
-      const storageData = await api.storage(path);
+      const [sessionData, data, storageData] = await Promise.all([
+        api.session(),
+        api.list(path),
+        api.storage(path),
+      ]);
+      setSession(sessionData);
       setFiles(data);
       setStorage(storageData);
       setError(null);
@@ -100,6 +105,7 @@ export function useFileSystem() {
     loading,
     error,
     storage,
+    session,
     viewMode,
     setViewMode,
     navigate,

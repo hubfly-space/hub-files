@@ -11,6 +11,7 @@ import {
   Package,
   X,
   FilePlusCorner,
+  HardDriveDownload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,9 @@ interface ToolbarProps {
   onBulkZip: () => void;
   onClearSelection: () => void;
   onOpenSelected?: () => void;
+  canHostMount?: boolean;
+  hostMounting?: boolean;
+  onHostMount?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -69,6 +73,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onBulkDelete,
   onBulkZip,
   onClearSelection,
+  canHostMount = false,
+  hostMounting = false,
+  onHostMount,
 }) => {
   const [localSearch, setLocalSearch] = useState(search);
 
@@ -197,6 +204,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     {selectionMode ? "Exit Selection" : "Enter Selection Mode"}
                   </TooltipContent>
                 </Tooltip>
+
+                {canHostMount && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        onClick={onHostMount}
+                        disabled={hostMounting}
+                        className="h-10 w-10 rounded-xl bg-secondary/50 hover:bg-primary hover:text-primary-foreground transition-all"
+                      >
+                        <HardDriveDownload className={cn("w-4.5 h-4.5", hostMounting && "animate-pulse")} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Mount SMB on this machine</TooltipContent>
+                  </Tooltip>
+                )}
 
                 <div className="w-px h-6 bg-border/60 mx-1" />
 

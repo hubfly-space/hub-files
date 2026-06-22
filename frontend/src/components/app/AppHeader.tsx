@@ -32,6 +32,9 @@ type AppHeaderProps = {
   onBulkZip: () => void;
   onClearSelection: () => void;
   onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  canHostMount?: boolean;
+  hostMounting?: boolean;
+  onHostMount?: () => void;
 };
 
 export function AppHeader({
@@ -54,6 +57,9 @@ export function AppHeader({
   onBulkZip,
   onClearSelection,
   onFileChange,
+  canHostMount,
+  hostMounting,
+  onHostMount,
 }: AppHeaderProps) {
   return (
     <header className="shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-xl z-30 px-6 py-4">
@@ -67,7 +73,7 @@ export function AppHeader({
 
               <div className="hidden sm:block">
                 <h1 className="text-base font-bold tracking-tight leading-none">
-                  HubFly
+                  HubFiles
                 </h1>
                 <p className="text-[10px] uppercase tracking-widest text-muted-foreground mt-1 font-semibold">
                   Files Manager
@@ -97,6 +103,9 @@ export function AppHeader({
           onBulkDelete={onBulkDelete}
           onBulkZip={onBulkZip}
           onClearSelection={onClearSelection}
+          canHostMount={canHostMount}
+          hostMounting={hostMounting}
+          onHostMount={onHostMount}
         />
       </div>
 

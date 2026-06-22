@@ -16,6 +16,22 @@ export interface StorageInfo {
   usedPercent: number;
 }
 
+export interface SessionInfo {
+  root: string;
+  type: "local" | "smb";
+  canHostMount: boolean;
+  hostMountRoot?: string;
+  readonly: boolean;
+  allowUpload: boolean;
+  allowEdit: boolean;
+  allowDelete: boolean;
+}
+
+export interface HostMountResult {
+  mountPath: string;
+  alreadyMounted: boolean;
+}
+
 export const api = {
   getToken: () => {
     const params = new URLSearchParams(window.location.search);
@@ -26,6 +42,23 @@ export const api = {
     Authorization: `Bearer ${api.getToken()}`,
     "Content-Type": "application/json",
   }),
+
+  session: async (): Promise<SessionInfo> => {
+    const res = await fetch(`${API_BASE}/session`, {
+      headers: api.headers(),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  hostMount: async (): Promise<HostMountResult> => {
+    const res = await fetch(`${API_BASE}/host-mount`, {
+      method: "POST",
+      headers: api.headers(),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
 
   list: async (path: string): Promise<FileInfo[]> => {
     const res = await fetch(
