@@ -1,19 +1,26 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"hubfly-files/internal/archive"
 	"hubfly-files/internal/config"
+	"hubfly-files/internal/filebackend"
 	"hubfly-files/internal/filesystem"
+	"hubfly-files/internal/hostmount"
 	"hubfly-files/internal/sessions"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -23,11 +30,13 @@ const (
 	// Demo storage values exposed in demo mode.
 	DemoTotalBytes = 20 << 20
 	DemoUsedBytes  = 5 << 20
+	DefaultSMBPort = 445
 )
 
 type Server struct {
 	Config   *config.Config
 	Sessions *sessions.Store
+	SMBPool  *filebackend.SMBPool
 	// Store    *sqlite.Storage
 }
 
@@ -35,6 +44,7 @@ func NewServer(cfg *config.Config, store *sessions.Store) *Server {
 	return &Server{
 		Config:   cfg,
 		Sessions: store,
+		SMBPool:  filebackend.NewSMBPool(),
 		// Store:    db,
 	}
 }
@@ -125,6 +135,121 @@ func validUploadFilename(name string) bool {
 		!strings.ContainsRune(name, 0)
 }
 
+type sessionContextKey struct{}
+
+func sessionFromRequest(r *http.Request) *sessions.Session {
+	session, _ := r.Context().Value(sessionContextKey{}).(*sessions.Session)
+	return session
+}
+
+func (s *Server) backendForRequest(r *http.Request) filebackend.Backend {
+	session := sessionFromRequest(r)
+	if session != nil && session.SMB != nil {
+		return filebackend.SMB{
+			Pool:   s.SMBPool,
+			Key:    session.Code,
+			Config: *session.SMB,
+		}
+	}
+	return filebackend.Local{Root: r.Header.Get("X-Session-Root")}
+}
+
+func parseSMBSessionRoot(root, username, password, domain, workstation string) (string, *sessions.SMBConfig, error) {
+	u, err := url.Parse(root)
+	if err != nil {
+		return "", nil, err
+	}
+	if strings.ToLower(u.Scheme) != "smb" {
+		return "", nil, fmt.Errorf("unsupported SMB scheme")
+	}
+
+	host := u.Hostname()
+	if host == "" {
+		return "", nil, fmt.Errorf("SMB host is required")
+	}
+
+	port := DefaultSMBPort
+	if rawPort := u.Port(); rawPort != "" {
+		parsed, err := strconv.Atoi(rawPort)
+		if err != nil || parsed <= 0 || parsed > 65535 {
+			return "", nil, fmt.Errorf("invalid SMB port")
+		}
+		port = parsed
+	}
+
+	parts := strings.Split(strings.Trim(u.EscapedPath(), "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		return "", nil, fmt.Errorf("SMB share is required")
+	}
+
+	share, err := url.PathUnescape(parts[0])
+	if err != nil || share == "" || strings.ContainsAny(share, `/\\`) {
+		return "", nil, fmt.Errorf("invalid SMB share")
+	}
+
+	baseParts := make([]string, 0, len(parts)-1)
+	for _, rawPart := range parts[1:] {
+		part, err := url.PathUnescape(rawPart)
+		if err != nil {
+			return "", nil, fmt.Errorf("invalid SMB base path")
+		}
+		if part == "" || part == "." {
+			continue
+		}
+		if part == ".." || strings.ContainsRune(part, 0) {
+			return "", nil, filesystem.ErrUnauthorized
+		}
+		baseParts = append(baseParts, part)
+	}
+
+	if username == "" {
+		username = u.User.Username()
+	}
+	if password == "" {
+		password, _ = u.User.Password()
+	}
+	if domain == "" {
+		for _, sep := range []string{";", `\\`} {
+			if before, after, ok := strings.Cut(username, sep); ok {
+				domain = before
+				username = after
+				break
+			}
+		}
+	}
+
+	cfg := &sessions.SMBConfig{
+		Host:        host,
+		Port:        port,
+		Share:       share,
+		BasePath:    strings.Join(baseParts, "/"),
+		Username:    username,
+		Password:    password,
+		Domain:      domain,
+		Workstation: workstation,
+	}
+
+	return sanitizedSMBRoot(*cfg), cfg, nil
+}
+
+func sanitizedSMBRoot(cfg sessions.SMBConfig) string {
+	host := cfg.Host
+	if cfg.Port != 0 && cfg.Port != DefaultSMBPort {
+		host = net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
+	}
+
+	parts := []string{cfg.Share}
+	if cfg.BasePath != "" {
+		parts = append(parts, strings.Split(cfg.BasePath, "/")...)
+	}
+
+	return (&url.URL{Scheme: "smb", Host: host, Path: "/" + strings.Join(parts, "/")}).String()
+}
+
+func pathpkgBase(filePath string) string {
+	return path.Base(strings.ReplaceAll(filePath, `\`, "/"))
+}
+
 // Middleware to validate session
 func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -183,7 +308,8 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			r.Header.Set("X-Session-AllowDelete", "false")
 		}
 
-		next(w, r)
+		ctx := context.WithValue(r.Context(), sessionContextKey{}, session)
+		next(w, r.WithContext(ctx))
 	}
 }
 
@@ -210,10 +336,9 @@ func (s *Server) checkPermission(w http.ResponseWriter, r *http.Request, permFla
 }
 
 func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
-	root := r.Header.Get("X-Session-Root")
 	path := r.URL.Query().Get("path")
 
-	files, err := filesystem.ListDir(root, path)
+	files, err := s.backendForRequest(r).List(r.Context(), path)
 	if err != nil {
 		log.Printf("List error: %v", err)
 		writeFileSystemError(w, err)
@@ -222,6 +347,73 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(files)
+}
+
+func (s *Server) handleSessionInfo(w http.ResponseWriter, r *http.Request) {
+	session := sessionFromRequest(r)
+	if session == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	response := struct {
+		Root          string `json:"root"`
+		Type          string `json:"type"`
+		CanHostMount  bool   `json:"canHostMount"`
+		HostMountRoot string `json:"hostMountRoot,omitempty"`
+		ReadOnly      bool   `json:"readonly"`
+		AllowUpload   bool   `json:"allowUpload"`
+		AllowEdit     bool   `json:"allowEdit"`
+		AllowDelete   bool   `json:"allowDelete"`
+	}{
+		Root:         session.Root,
+		Type:         "local",
+		CanHostMount: false,
+		ReadOnly:     session.ReadOnly,
+		AllowUpload:  session.AllowUpload,
+		AllowEdit:    session.AllowEdit,
+		AllowDelete:  session.AllowDelete,
+	}
+	if session.SMB != nil {
+		response.Type = "smb"
+		response.CanHostMount = s.Config.AllowHostMounts
+		if s.Config.AllowHostMounts {
+			response.HostMountRoot = s.Config.HostMountRoot
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleHostMount(w http.ResponseWriter, r *http.Request) {
+	if !s.Config.AllowHostMounts {
+		http.Error(w, "Host mounts are disabled", http.StatusForbidden)
+		return
+	}
+
+	session := sessionFromRequest(r)
+	if session == nil || session.SMB == nil {
+		http.Error(w, "Host mount requires an SMB session", http.StatusBadRequest)
+		return
+	}
+
+	result, err := hostmount.MountSMB(r.Context(), s.Config.HostMountRoot, session.SMB)
+	if err != nil {
+		log.Printf("Host mount error: %v", err)
+		switch {
+		case errors.Is(err, hostmount.ErrUnsupportedSession), errors.Is(err, hostmount.ErrUnsafeMountConfig):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		case errors.Is(err, os.ErrPermission):
+			http.Error(w, "Permission denied", http.StatusForbidden)
+		default:
+			http.Error(w, "Host mount failed", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
 
 func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
@@ -240,7 +432,7 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storage, err := filesystem.GetStorageInfo(root, path)
+	storage, err := s.backendForRequest(r).Storage(r.Context(), path)
 	if err != nil {
 		log.Printf("Storage error: %v", err)
 		writeFileSystemError(w, err)
@@ -252,10 +444,9 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
-	root := r.Header.Get("X-Session-Root")
 	path := r.URL.Query().Get("path")
 
-	reader, err := filesystem.ReadFile(root, path)
+	reader, err := s.backendForRequest(r).Read(r.Context(), path)
 	if err != nil {
 		log.Printf("GetFile error: %v", err)
 		writeFileSystemError(w, err)
@@ -264,7 +455,7 @@ func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	defer reader.Close()
 
 	if r.URL.Query().Get("download") == "1" {
-		w.Header().Set("Content-Disposition", "attachment; filename=\""+filepath.Base(path)+"\"")
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+pathpkgBase(path)+"\"")
 		w.Header().Set("Content-Type", "application/octet-stream")
 	}
 
@@ -275,10 +466,9 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 	if !s.checkPermission(w, r, "AllowEdit") {
 		return
 	}
-	root := r.Header.Get("X-Session-Root")
 	path := r.URL.Query().Get("path")
 
-	err := filesystem.WriteFile(root, path, r.Body)
+	err := s.backendForRequest(r).Write(r.Context(), path, r.Body)
 	if err != nil {
 		log.Printf("PutFile error: %v", err)
 		writeFileSystemError(w, err)
@@ -292,7 +482,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	root := r.Header.Get("X-Session-Root")
+	backend := s.backendForRequest(r)
 	maxUploadBytes := s.Config.MaxUploadBytes
 	if maxUploadBytes > 0 {
 		if r.ContentLength > maxUploadBytes {
@@ -303,7 +493,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-		s.handleMultipartUpload(w, r, root)
+		s.handleMultipartUpload(w, r, backend)
 		return
 	}
 
@@ -314,8 +504,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	finalPath := filepath.Join(dirPath, filename)
-	if err := filesystem.WriteFileAtomic(root, finalPath, r.Body); err != nil {
+	finalPath := path.Join(dirPath, filename)
+	if err := backend.WriteAtomic(r.Context(), finalPath, r.Body); err != nil {
 		log.Printf("Upload error: %v", err)
 		writeUploadError(w, err)
 		return
@@ -324,7 +514,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleMultipartUpload(w http.ResponseWriter, r *http.Request, root string) {
+func (s *Server) handleMultipartUpload(w http.ResponseWriter, r *http.Request, backend filebackend.Backend) {
 	reader, err := r.MultipartReader()
 	if err != nil {
 		http.Error(w, "Invalid file upload", http.StatusBadRequest)
@@ -363,8 +553,8 @@ func (s *Server) handleMultipartUpload(w http.ResponseWriter, r *http.Request, r
 				return
 			}
 
-			finalPath := filepath.Join(dirPath, filename)
-			if err := filesystem.WriteFileAtomic(root, finalPath, part); err != nil {
+			finalPath := path.Join(dirPath, filename)
+			if err := backend.WriteAtomic(r.Context(), finalPath, part); err != nil {
 				log.Printf("Upload error: %v", err)
 				writeUploadError(w, err)
 				return
@@ -381,7 +571,6 @@ func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {
 	if s.checkReadOnly(w, r) {
 		return
 	}
-	root := r.Header.Get("X-Session-Root")
 	var req struct {
 		Path string `json:"path"`
 	}
@@ -390,7 +579,7 @@ func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := filesystem.Mkdir(root, req.Path)
+	err := s.backendForRequest(r).Mkdir(r.Context(), req.Path)
 	if err != nil {
 		log.Printf("Mkdir error: %v", err)
 		writeFileSystemError(w, err)
@@ -403,8 +592,6 @@ func (s *Server) handleTouch(w http.ResponseWriter, r *http.Request) {
 	if s.checkReadOnly(w, r) {
 		return
 	}
-	root := r.Header.Get("X-Session-Root")
-
 	var req struct {
 		Path string `json:"path"`
 	}
@@ -414,7 +601,7 @@ func (s *Server) handleTouch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := filesystem.Touch(root, req.Path)
+	err := s.backendForRequest(r).Touch(r.Context(), req.Path)
 	if err != nil {
 		log.Printf("Touch error: %v", err)
 		writeFileSystemError(w, err)
@@ -428,7 +615,6 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 	if s.checkReadOnly(w, r) {
 		return
 	}
-	root := r.Header.Get("X-Session-Root")
 	var req struct {
 		OldPath string `json:"oldPath"`
 		NewPath string `json:"newPath"`
@@ -438,7 +624,7 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := filesystem.Rename(root, req.OldPath, req.NewPath)
+	err := s.backendForRequest(r).Rename(r.Context(), req.OldPath, req.NewPath)
 	if err != nil {
 		log.Printf("Rename error: %v", err)
 		writeFileSystemError(w, err)
@@ -451,10 +637,9 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.checkPermission(w, r, "AllowDelete") {
 		return
 	}
-	root := r.Header.Get("X-Session-Root")
 	path := r.URL.Query().Get("path")
 
-	err := filesystem.DeleteFile(root, path)
+	err := s.backendForRequest(r).Delete(r.Context(), path)
 	if err != nil {
 		log.Printf("Delete error: %v", err)
 		writeFileSystemError(w, err)
@@ -465,6 +650,10 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleZip(w http.ResponseWriter, r *http.Request) {
 	if s.checkReadOnly(w, r) {
+		return
+	}
+	if session := sessionFromRequest(r); session != nil && session.SMB != nil {
+		http.Error(w, "zip is not supported for SMB sessions yet", http.StatusNotImplemented)
 		return
 	}
 	root := r.Header.Get("X-Session-Root")
@@ -508,6 +697,10 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 	if s.checkReadOnly(w, r) {
 		return
 	}
+	if session := sessionFromRequest(r); session != nil && session.SMB != nil {
+		http.Error(w, "extract is not supported for SMB sessions yet", http.StatusNotImplemented)
+		return
+	}
 	root := r.Header.Get("X-Session-Root")
 	var req struct {
 		Source string `json:"source"`
@@ -547,12 +740,16 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Root        string `json:"root"`
-		TTLSeconds  int    `json:"ttlSeconds"`
-		ReadOnly    bool   `json:"readonly"`
-		AllowUpload bool   `json:"allowUpload"`
-		AllowEdit   bool   `json:"allowEdit"`
-		AllowDelete bool   `json:"allowDelete"`
+		Root           string `json:"root"`
+		TTLSeconds     int    `json:"ttlSeconds"`
+		ReadOnly       bool   `json:"readonly"`
+		AllowUpload    bool   `json:"allowUpload"`
+		AllowEdit      bool   `json:"allowEdit"`
+		AllowDelete    bool   `json:"allowDelete"`
+		SMBUsername    string `json:"smbUsername"`
+		SMBPassword    string `json:"smbPassword"`
+		SMBDomain      string `json:"smbDomain"`
+		SMBWorkstation string `json:"smbWorkstation"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -569,15 +766,32 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Clean and validate the root path
-	cleanRoot := filepath.Clean(req.Root)
-	absRoot, err := filepath.Abs(cleanRoot)
-	if err != nil {
-		http.Error(w, "Invalid root path", http.StatusBadRequest)
-		return
+	root := req.Root
+	var smbCfg *sessions.SMBConfig
+	var err error
+	if strings.EqualFold(strings.TrimSpace(root), "smb://") || strings.HasPrefix(strings.ToLower(root), "smb://") {
+		root, smbCfg, err = parseSMBSessionRoot(root, req.SMBUsername, req.SMBPassword, req.SMBDomain, req.SMBWorkstation)
+		if err != nil {
+			log.Printf("CreateSession SMB root error: %v", err)
+			http.Error(w, "Invalid SMB root", http.StatusBadRequest)
+			return
+		}
+	} else {
+		// Clean and validate the local root path.
+		cleanRoot := filepath.Clean(root)
+		root, err = filepath.Abs(cleanRoot)
+		if err != nil {
+			http.Error(w, "Invalid root path", http.StatusBadRequest)
+			return
+		}
 	}
 
-	session, err := s.Sessions.CreateSession(absRoot, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete)
+	var session *sessions.Session
+	if smbCfg != nil {
+		session, err = s.Sessions.CreateSMBSession(root, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete, smbCfg)
+	} else {
+		session, err = s.Sessions.CreateSession(root, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete)
+	}
 	if err != nil {
 		log.Printf("CreateSession error: %v", err)
 		switch {
@@ -633,6 +847,8 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// UI API
+	mux.HandleFunc("/api/session", s.authMiddleware(methodHandlers([]string{http.MethodGet}, s.handleSessionInfo)))
+	mux.HandleFunc("/api/host-mount", s.authMiddleware(methodHandlers([]string{http.MethodPost}, s.handleHostMount)))
 	mux.HandleFunc("/api/list", s.authMiddleware(methodHandlers([]string{http.MethodGet}, s.handleList)))
 	mux.HandleFunc("/api/storage", s.authMiddleware(methodHandlers([]string{http.MethodGet}, s.handleStorage)))
 	mux.HandleFunc("/api/file", s.authMiddleware(methodHandlers([]string{http.MethodGet, http.MethodPut}, func(w http.ResponseWriter, r *http.Request) {
