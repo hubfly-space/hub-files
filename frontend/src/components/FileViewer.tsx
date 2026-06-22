@@ -69,21 +69,31 @@ export const FileViewer: React.FC<FileViewerProps> = ({
   ].includes(ext || "");
 
   useEffect(() => {
-    if (isText) {
-      api
-        .getFile(path)
-        .then((text) => {
+    if (!isText) return;
+
+    let cancelled = false;
+
+    api
+      .getFile(path)
+      .then((text) => {
+        if (!cancelled) {
           setContent(text);
-        })
-        .catch((err) => {
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
           toast({
             title: "Failed to load file",
             description: err.message,
             variant: "destructive",
           });
-        });
-    }
-  });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [path, isText, toast]);
 
   const handleDownload = () => {
     const session = api.getToken();
@@ -104,10 +114,9 @@ export const FileViewer: React.FC<FileViewerProps> = ({
         title: "Saved successfully",
         description: "Your changes have been saved.",
       });
-    } catch (err) {
+    } catch {
       toast({
         title: "Failed to save",
-        description: err.message,
         variant: "destructive",
       });
     } finally {

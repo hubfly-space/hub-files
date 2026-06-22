@@ -1,6 +1,6 @@
-import React, { useRef } from 'react';
-import type { FileInfo } from '../api';
-import { FileIcon } from './FileIcon';
+import React, { useRef } from "react";
+import type { FileInfo } from "../api";
+import { FileIcon } from "./FileIcon";
 import {
   MoreHorizontal,
   Pencil,
@@ -10,8 +10,8 @@ import {
   CheckCircle2,
   Circle,
   Calendar,
-  HardDrive
-} from 'lucide-react';
+  HardDrive,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,12 +20,12 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { cn } from "@/lib/utils";
+import { motion } from "framer-motion";
 
 interface FileItemProps {
   file: FileInfo;
-  viewMode: 'list' | 'grid';
+  viewMode: "list" | "grid";
   isSelected: boolean;
   selectionMode: boolean;
   onNavigate: (name: string) => void;
@@ -38,19 +38,28 @@ interface FileItemProps {
 }
 
 export const FileItem: React.FC<FileItemProps> = ({
-  file, viewMode, isSelected, selectionMode,
-  onNavigate, onSelect, onDelete, onRename, onZip, onExtract, onMove
+  file,
+  viewMode,
+  isSelected,
+  selectionMode,
+  onNavigate,
+  onSelect,
+  onDelete,
+  onRename,
+  onZip,
+  onExtract,
+  onMove,
 }) => {
   const clickTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDoubleClick = useRef(false);
   const [isDragOver, setIsDragOver] = React.useState(false);
 
   const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
   };
 
   const handleClick = (e: React.MouseEvent) => {
@@ -82,14 +91,17 @@ export const FileItem: React.FC<FileItemProps> = ({
   };
 
   const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData('application/json', JSON.stringify({ name: file.name }));
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData(
+      "application/json",
+      JSON.stringify({ name: file.name }),
+    );
+    e.dataTransfer.effectAllowed = "move";
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     if (file.isDir) {
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
+      e.dataTransfer.dropEffect = "move";
       if (!isDragOver) setIsDragOver(true);
     }
   };
@@ -106,17 +118,17 @@ export const FileItem: React.FC<FileItemProps> = ({
       e.preventDefault();
       setIsDragOver(false);
       try {
-        const data = JSON.parse(e.dataTransfer.getData('application/json'));
+        const data = JSON.parse(e.dataTransfer.getData("application/json"));
         if (data && data.name && data.name !== file.name && onMove) {
           onMove(data.name, file.name);
         }
-      } catch (err) {
+      } catch {
         // ignore invalid drag data
       }
     }
   };
 
-  if (viewMode === 'grid') {
+  if (viewMode === "grid") {
     return (
       <motion.div
         layout
@@ -132,25 +144,39 @@ export const FileItem: React.FC<FileItemProps> = ({
         onDrop={handleDrop}
         className={cn(
           "group relative flex flex-col items-center gap-4 p-6 rounded-[2rem] border transition-all cursor-pointer select-none",
-          file.name.startsWith('.') && "opacity-60 hover:opacity-100",
+          file.name.startsWith(".") && "opacity-60 hover:opacity-100",
           isDragOver && "ring-2 ring-primary bg-primary/10 shadow-lg scale-105",
           isSelected
             ? "bg-primary/5 border-primary/40 shadow-xl shadow-primary/5 ring-1 ring-primary/20"
-            : "bg-card border-border/50 hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/10"
+            : "bg-card border-border/50 hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/10",
         )}
       >
-        <div className={cn(
-          "w-20 h-20 rounded-[1.75rem] transition-all flex items-center justify-center relative",
-          isSelected ? "bg-primary/10" : "bg-secondary/40 group-hover:bg-primary/5"
-        )}>
+        <div
+          className={cn(
+            "w-20 h-20 rounded-[1.75rem] transition-all flex items-center justify-center relative",
+            isSelected
+              ? "bg-primary/10"
+              : "bg-secondary/40 group-hover:bg-primary/5",
+          )}
+        >
           {/* Subtle dots pattern on icon background */}
-          <div className="absolute inset-0 opacity-[0.1] pointer-events-none" 
-               style={{ backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '12px 12px' }} />
-          
-          <FileIcon isDir={file.isDir} name={file.name} className={cn(
-            "w-10 h-10 transition-transform group-hover:scale-110 duration-500 ease-out z-10",
-            isSelected ? "text-primary" : "text-foreground/80"
-          )} />
+          <div
+            className="absolute inset-0 opacity-[0.1] pointer-events-none"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle, currentColor 1px, transparent 1px)",
+              backgroundSize: "12px 12px",
+            }}
+          />
+
+          <FileIcon
+            isDir={file.isDir}
+            name={file.name}
+            className={cn(
+              "w-10 h-10 transition-transform group-hover:scale-110 duration-500 ease-out z-10",
+              isSelected ? "text-primary" : "text-foreground/80",
+            )}
+          />
 
           {(selectionMode || isSelected) && (
             <div className="absolute -top-2 -right-2 z-20">
@@ -178,7 +204,10 @@ export const FileItem: React.FC<FileItemProps> = ({
           )}
         </div>
 
-        <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 z-20" onClick={e => e.stopPropagation()}>
+        <div
+          className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 z-20"
+          onClick={(e) => e.stopPropagation()}
+        >
           <FileItemActions
             file={file}
             onDelete={onDelete}
@@ -205,23 +234,34 @@ export const FileItem: React.FC<FileItemProps> = ({
       onDrop={handleDrop}
       className={cn(
         "group flex items-center justify-between p-4 rounded-2xl transition-all cursor-pointer select-none border",
-        file.name.startsWith('.') && "opacity-60 hover:opacity-100",
-        isDragOver && "ring-2 ring-primary bg-primary/10 shadow-lg scale-[1.01]",
+        file.name.startsWith(".") && "opacity-60 hover:opacity-100",
+        isDragOver &&
+          "ring-2 ring-primary bg-primary/10 shadow-lg scale-[1.01]",
         isSelected
           ? "bg-primary/5 border-primary/30 shadow-md ring-1 ring-primary/10"
-          : "bg-transparent border-transparent hover:bg-secondary/50 hover:border-border/50 hover:shadow-lg hover:shadow-black/5"
+          : "bg-transparent border-transparent hover:bg-secondary/50 hover:border-border/50 hover:shadow-lg hover:shadow-black/5",
       )}
     >
       <div className="flex items-center gap-5 flex-1 min-w-0">
         <div className="relative shrink-0 w-12 h-12 rounded-xl bg-secondary/50 flex items-center justify-center group-hover:bg-primary/5 transition-colors overflow-hidden">
           {/* Subtle dots pattern on icon background */}
-          <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
-               style={{ backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '10px 10px' }} />
-          
-          <FileIcon isDir={file.isDir} name={file.name} className={cn(
-            "w-6 h-6 transition-transform group-hover:scale-110 z-10",
-            isSelected ? "text-primary" : "text-muted-foreground"
-          )} />
+          <div
+            className="absolute inset-0 opacity-[0.05] pointer-events-none"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle, currentColor 1px, transparent 1px)",
+              backgroundSize: "10px 10px",
+            }}
+          />
+
+          <FileIcon
+            isDir={file.isDir}
+            name={file.name}
+            className={cn(
+              "w-6 h-6 transition-transform group-hover:scale-110 z-10",
+              isSelected ? "text-primary" : "text-muted-foreground",
+            )}
+          />
           {(selectionMode || isSelected) && (
             <div className="absolute -top-1.5 -left-1.5 z-20">
               {isSelected ? (
@@ -237,7 +277,9 @@ export const FileItem: React.FC<FileItemProps> = ({
           )}
         </div>
         <div className="flex flex-col min-w-0">
-          <span className="text-sm font-bold truncate group-hover:text-primary transition-colors">{file.name}</span>
+          <span className="text-sm font-bold truncate group-hover:text-primary transition-colors">
+            {file.name}
+          </span>
           <div className="flex items-center gap-4 text-[10px] text-muted-foreground font-bold uppercase tracking-widest opacity-70">
             {!file.isDir && (
               <span className="flex items-center gap-1.5">
@@ -253,7 +295,10 @@ export const FileItem: React.FC<FileItemProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+      <div
+        className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={(e) => e.stopPropagation()}
+      >
         <FileItemActions
           file={file}
           onDelete={onDelete}
@@ -275,7 +320,11 @@ interface ActionProps {
 }
 
 const FileItemActions: React.FC<ActionProps> = ({
-  file, onDelete, onRename, onZip, onExtract
+  file,
+  onDelete,
+  onRename,
+  onZip,
+  onExtract,
 }) => {
   return (
     <DropdownMenu>
@@ -293,7 +342,7 @@ const FileItemActions: React.FC<ActionProps> = ({
           <Box className="mr-2 w-4 h-4" />
           Archive
         </DropdownMenuItem>
-        {file.name.endsWith('.zip') && (
+        {file.name.endsWith(".zip") && (
           <DropdownMenuItem onClick={() => onExtract(file.name)}>
             <ExternalLink className="mr-2 w-4 h-4" />
             Extract

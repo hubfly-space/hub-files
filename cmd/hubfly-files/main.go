@@ -6,8 +6,12 @@ import (
 	"hubfly-files/internal/config"
 	"hubfly-files/internal/server"
 	"hubfly-files/internal/sessions"
+	"hubfly-files/internal/sqlite"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 var (
@@ -31,26 +35,61 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func startServer(name, addr string, handler http.Handler) {
+	go func() {
+		log.Printf("%s starting on %s", name, addr)
+
+		err := http.ListenAndServe(addr, handler)
+		if err != nil && err != http.ErrServerClosed {
+			log.Printf("%s error: %v", name, err)
+		}
+	}()
+}
+
 func main() {
 	showVersion := flag.Bool("version", false, "Print version information and exit")
+	flag.Parse()
+
 	cfg := config.LoadConfig()
+
 	if *showVersion {
 		fmt.Printf("hubfly-files %s\ncommit=%s\nbuildDate=%s\n", version, commit, buildDate)
 		return
 	}
+
 	sessionStore := sessions.NewStore()
 	srv := server.NewServer(cfg, sessionStore)
 
-	// UI/API Server
-	go func() {
-		fmt.Printf("HubFly Files %s starting\n", version)
-		fmt.Printf("UI/API Server starting on :%s serving UI from %s\n", cfg.APIPort, cfg.UIDir)
-		mux := srv.SetupRoutes()
-		log.Fatal(http.ListenAndServe(":"+cfg.APIPort, corsMiddleware(mux)))
-	}()
+	// intialize db
 
-	// Management Server
-	fmt.Printf("Management Server starting on :%s\n", cfg.ManagementPort)
-	mux := srv.SetupManagementRoutes()
-	log.Fatal(http.ListenAndServe(":"+cfg.ManagementPort, corsMiddleware(mux)))
+	store, err := sqlite.New("hubfiles.sqlite")
+	if err != nil {
+		log.Printf("warning: database disabled: %v", err)
+		store = nil
+	}
+	if store != nil {
+		defer store.Close()
+	}
+	//initialize server
+	apiMux := srv.SetupRoutes()
+	mgmtMux := srv.SetupManagementRoutes()
+
+	startServer(
+		"API Server",
+		":"+cfg.APIPort,
+		corsMiddleware(apiMux),
+	)
+
+	startServer(
+		"Management Server",
+		":"+cfg.ManagementPort,
+		corsMiddleware(mgmtMux),
+	)
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	<-stop
+	log.Println("shutting down...")
+	log.Println("servers stopped")
 }
