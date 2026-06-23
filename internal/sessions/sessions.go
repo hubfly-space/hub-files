@@ -23,6 +23,7 @@ type Session struct {
 	AllowEdit   bool       `json:"allowEdit"`
 	AllowDelete bool       `json:"allowDelete"`
 	SMB         *SMBConfig `json:"-"`
+	FTP         *FTPConfig `json:"-"`
 }
 
 type SMBConfig struct {
@@ -34,6 +35,14 @@ type SMBConfig struct {
 	Password    string
 	Domain      string
 	Workstation string
+}
+
+type FTPConfig struct {
+	Host     string
+	Port     int
+	BasePath string
+	Username string
+	Password string
 }
 
 type Store struct {
@@ -55,14 +64,18 @@ func NewStore() *Store {
 }
 
 func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool) (*Session, error) {
-	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil)
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, nil)
 }
 
 func (s *Store) CreateSMBSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, smb *SMBConfig) (*Session, error) {
-	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, smb)
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, smb, nil)
 }
 
-func (s *Store) createSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, smb *SMBConfig) (*Session, error) {
+func (s *Store) CreateFTPSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, ftp *FTPConfig) (*Session, error) {
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, ftp)
+}
+
+func (s *Store) createSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, smb *SMBConfig, ftp *FTPConfig) (*Session, error) {
 	// Rate limiting: max 10 session creations per minute
 	s.createMu.Lock()
 	now := time.Now()
@@ -96,6 +109,7 @@ func (s *Store) createSession(root string, ttlSeconds int, readonly bool, allowU
 		AllowEdit:   allowEdit,
 		AllowDelete: allowDelete,
 		SMB:         smb,
+		FTP:         ftp,
 	}
 
 	s.mu.Lock()

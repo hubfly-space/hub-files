@@ -31,12 +31,14 @@ const (
 	DemoTotalBytes = 20 << 20
 	DemoUsedBytes  = 5 << 20
 	DefaultSMBPort = 445
+	DefaultFTPPort = 21
 )
 
 type Server struct {
 	Config   *config.Config
 	Sessions *sessions.Store
 	SMBPool  *filebackend.SMBPool
+	FTPPool  *filebackend.FTPPool
 	// Store    *sqlite.Storage
 }
 
@@ -45,6 +47,7 @@ func NewServer(cfg *config.Config, store *sessions.Store) *Server {
 		Config:   cfg,
 		Sessions: store,
 		SMBPool:  filebackend.NewSMBPool(),
+		FTPPool:  filebackend.NewFTPPool(),
 		// Store:    db,
 	}
 }
@@ -151,6 +154,13 @@ func (s *Server) backendForRequest(r *http.Request) filebackend.Backend {
 			Config: *session.SMB,
 		}
 	}
+	if session != nil && session.FTP != nil {
+		return filebackend.FTP{
+			Pool:   s.FTPPool,
+			Key:    session.Code,
+			Config: *session.FTP,
+		}
+	}
 	return filebackend.Local{Root: r.Header.Get("X-Session-Root")}
 }
 
@@ -208,6 +218,10 @@ func parseSMBSessionRoot(root, username, password, domain, workstation string) (
 	if password == "" {
 		password, _ = u.User.Password()
 	}
+	if username == "" {
+		// go-smb2 requires explicit guest auth instead of anonymous auth.
+		username = "guest"
+	}
 	if domain == "" {
 		for _, sep := range []string{";", `\\`} {
 			if before, after, ok := strings.Cut(username, sep); ok {
@@ -248,6 +262,85 @@ func sanitizedSMBRoot(cfg sessions.SMBConfig) string {
 
 func pathpkgBase(filePath string) string {
 	return path.Base(strings.ReplaceAll(filePath, `\`, "/"))
+}
+
+func parseFTPSessionRoot(root, username, password string) (string, *sessions.FTPConfig, error) {
+	u, err := url.Parse(root)
+	if err != nil {
+		return "", nil, err
+	}
+	if strings.ToLower(u.Scheme) != "ftp" {
+		return "", nil, fmt.Errorf("unsupported FTP scheme")
+	}
+
+	host := u.Hostname()
+	if host == "" {
+		return "", nil, fmt.Errorf("FTP host is required")
+	}
+
+	port := DefaultFTPPort
+	if rawPort := u.Port(); rawPort != "" {
+		parsed, err := strconv.Atoi(rawPort)
+		if err != nil || parsed <= 0 || parsed > 65535 {
+			return "", nil, fmt.Errorf("invalid FTP port")
+		}
+		port = parsed
+	}
+
+	basePath, err := safeURLBasePath(u.EscapedPath())
+	if err != nil {
+		return "", nil, err
+	}
+
+	if username == "" {
+		username = u.User.Username()
+	}
+	if password == "" {
+		password, _ = u.User.Password()
+	}
+	username, password = filebackend.DefaultFTPCredentials(username, password)
+
+	cfg := &sessions.FTPConfig{
+		Host:     host,
+		Port:     port,
+		BasePath: basePath,
+		Username: username,
+		Password: password,
+	}
+
+	return sanitizedFTPSessionRoot(*cfg), cfg, nil
+}
+
+func safeURLBasePath(escapedPath string) (string, error) {
+	parts := strings.Split(strings.Trim(escapedPath, "/"), "/")
+	baseParts := make([]string, 0, len(parts))
+	for _, rawPart := range parts {
+		part, err := url.PathUnescape(rawPart)
+		if err != nil {
+			return "", fmt.Errorf("invalid base path")
+		}
+		if part == "" || part == "." {
+			continue
+		}
+		if part == ".." || strings.ContainsRune(part, 0) {
+			return "", filesystem.ErrUnauthorized
+		}
+		baseParts = append(baseParts, part)
+	}
+	return strings.Join(baseParts, "/"), nil
+}
+
+func sanitizedFTPSessionRoot(cfg sessions.FTPConfig) string {
+	host := cfg.Host
+	if cfg.Port != 0 && cfg.Port != DefaultFTPPort {
+		host = net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
+	}
+	return (&url.URL{Scheme: "ftp", Host: host, Path: "/" + cfg.BasePath}).String()
+}
+
+func isRemoteSession(r *http.Request) bool {
+	session := sessionFromRequest(r)
+	return session != nil && (session.SMB != nil || session.FTP != nil)
 }
 
 // Middleware to validate session
@@ -380,6 +473,12 @@ func (s *Server) handleSessionInfo(w http.ResponseWriter, r *http.Request) {
 		if s.Config.AllowHostMounts {
 			response.HostMountRoot = s.Config.HostMountRoot
 		}
+	} else if session.FTP != nil {
+		response.Type = "ftp"
+		response.CanHostMount = s.Config.AllowHostMounts
+		if s.Config.AllowHostMounts {
+			response.HostMountRoot = s.Config.HostMountRoot
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -387,18 +486,31 @@ func (s *Server) handleSessionInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleHostMount(w http.ResponseWriter, r *http.Request) {
-	if !s.Config.AllowHostMounts {
-		http.Error(w, "Host mounts are disabled", http.StatusForbidden)
-		return
-	}
-
 	session := sessionFromRequest(r)
-	if session == nil || session.SMB == nil {
-		http.Error(w, "Host mount requires an SMB session", http.StatusBadRequest)
+	if session == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	result, err := hostmount.MountSMB(r.Context(), s.Config.HostMountRoot, session.SMB)
+	var result *hostmount.Result
+	var err error
+	if session.SMB != nil {
+		if !s.Config.AllowHostMounts {
+			http.Error(w, "Host mounts are disabled", http.StatusForbidden)
+			return
+		}
+		result, err = hostmount.MountSMB(r.Context(), s.Config.HostMountRoot, session.SMB)
+	} else if session.FTP != nil {
+		if !s.Config.AllowHostMounts {
+			http.Error(w, "Host mounts are disabled", http.StatusForbidden)
+			return
+		}
+		result, err = hostmount.MountFTP(r.Context(), s.Config.HostMountRoot, session.FTP)
+	} else {
+		http.Error(w, "Host mount requires an SMB or FTP session", http.StatusBadRequest)
+		return
+	}
+
 	if err != nil {
 		log.Printf("Host mount error: %v", err)
 		switch {
@@ -408,6 +520,45 @@ func (s *Server) handleHostMount(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Permission denied", http.StatusForbidden)
 		default:
 			http.Error(w, "Host mount failed", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func (s *Server) handleHostUnmount(w http.ResponseWriter, r *http.Request) {
+	session := sessionFromRequest(r)
+	if session == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if !s.Config.AllowHostMounts {
+		http.Error(w, "Host mounts are disabled", http.StatusForbidden)
+		return
+	}
+
+	var result *hostmount.UnmountResult
+	var err error
+	if session.SMB != nil {
+		result, err = hostmount.UnmountSMB(r.Context(), s.Config.HostMountRoot, session.SMB)
+	} else if session.FTP != nil {
+		result, err = hostmount.UnmountFTP(r.Context(), s.Config.HostMountRoot, session.FTP)
+	} else {
+		http.Error(w, "Host unmount requires an SMB or FTP session", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		log.Printf("Host unmount error: %v", err)
+		switch {
+		case errors.Is(err, hostmount.ErrUnsupportedSession), errors.Is(err, hostmount.ErrUnsafeMountConfig):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		case errors.Is(err, os.ErrPermission):
+			http.Error(w, "Permission denied", http.StatusForbidden)
+		default:
+			http.Error(w, "Host unmount failed", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -652,8 +803,8 @@ func (s *Server) handleZip(w http.ResponseWriter, r *http.Request) {
 	if s.checkReadOnly(w, r) {
 		return
 	}
-	if session := sessionFromRequest(r); session != nil && session.SMB != nil {
-		http.Error(w, "zip is not supported for SMB sessions yet", http.StatusNotImplemented)
+	if isRemoteSession(r) {
+		http.Error(w, "zip is not supported for remote sessions yet", http.StatusNotImplemented)
 		return
 	}
 	root := r.Header.Get("X-Session-Root")
@@ -697,8 +848,8 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 	if s.checkReadOnly(w, r) {
 		return
 	}
-	if session := sessionFromRequest(r); session != nil && session.SMB != nil {
-		http.Error(w, "extract is not supported for SMB sessions yet", http.StatusNotImplemented)
+	if isRemoteSession(r) {
+		http.Error(w, "extract is not supported for remote sessions yet", http.StatusNotImplemented)
 		return
 	}
 	root := r.Header.Get("X-Session-Root")
@@ -750,6 +901,8 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		SMBPassword    string `json:"smbPassword"`
 		SMBDomain      string `json:"smbDomain"`
 		SMBWorkstation string `json:"smbWorkstation"`
+		FTPUsername    string `json:"ftpUsername"`
+		FTPPassword    string `json:"ftpPassword"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -768,12 +921,20 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 
 	root := req.Root
 	var smbCfg *sessions.SMBConfig
+	var ftpCfg *sessions.FTPConfig
 	var err error
 	if strings.EqualFold(strings.TrimSpace(root), "smb://") || strings.HasPrefix(strings.ToLower(root), "smb://") {
 		root, smbCfg, err = parseSMBSessionRoot(root, req.SMBUsername, req.SMBPassword, req.SMBDomain, req.SMBWorkstation)
 		if err != nil {
 			log.Printf("CreateSession SMB root error: %v", err)
 			http.Error(w, "Invalid SMB root", http.StatusBadRequest)
+			return
+		}
+	} else if strings.EqualFold(strings.TrimSpace(root), "ftp://") || strings.HasPrefix(strings.ToLower(root), "ftp://") {
+		root, ftpCfg, err = parseFTPSessionRoot(root, req.FTPUsername, req.FTPPassword)
+		if err != nil {
+			log.Printf("CreateSession FTP root error: %v", err)
+			http.Error(w, "Invalid FTP root", http.StatusBadRequest)
 			return
 		}
 	} else {
@@ -789,6 +950,8 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	var session *sessions.Session
 	if smbCfg != nil {
 		session, err = s.Sessions.CreateSMBSession(root, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete, smbCfg)
+	} else if ftpCfg != nil {
+		session, err = s.Sessions.CreateFTPSession(root, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete, ftpCfg)
 	} else {
 		session, err = s.Sessions.CreateSession(root, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete)
 	}
@@ -849,6 +1012,7 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	// UI API
 	mux.HandleFunc("/api/session", s.authMiddleware(methodHandlers([]string{http.MethodGet}, s.handleSessionInfo)))
 	mux.HandleFunc("/api/host-mount", s.authMiddleware(methodHandlers([]string{http.MethodPost}, s.handleHostMount)))
+	mux.HandleFunc("/api/host-unmount", s.authMiddleware(methodHandlers([]string{http.MethodPost}, s.handleHostUnmount)))
 	mux.HandleFunc("/api/list", s.authMiddleware(methodHandlers([]string{http.MethodGet}, s.handleList)))
 	mux.HandleFunc("/api/storage", s.authMiddleware(methodHandlers([]string{http.MethodGet}, s.handleStorage)))
 	mux.HandleFunc("/api/file", s.authMiddleware(methodHandlers([]string{http.MethodGet, http.MethodPut}, func(w http.ResponseWriter, r *http.Request) {
