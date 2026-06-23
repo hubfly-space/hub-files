@@ -31,8 +31,8 @@ func LoadConfig() *Config {
 	demoDir := flag.String("demo-dir", "./demo", "Directory for demo mode")
 	uiDir := flag.String("ui-dir", "./frontend/dist", "Directory containing built UI assets")
 	maxUploadBytes := flag.Int64("max-upload-bytes", 100<<20, "Maximum upload size in bytes (0 disables the limit)")
-	allowHostMounts := flag.Bool("allow-host-mounts", true, "Allow SMB sessions to mount shares on this host")
-	hostMountRoot := flag.String("host-mount-root", "/mnt/hubfiles", "Directory for SMB host mounts")
+	allowHostMounts := flag.Bool("allow-host-mounts", false, "Allow remote sessions to mount on this host")
+	hostMountRoot := flag.String("host-mount-root", "/mnt/hubfiles", "Directory for host mounts")
 
 	flag.Parse()
 

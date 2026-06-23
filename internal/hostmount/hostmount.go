@@ -16,13 +16,18 @@ import (
 )
 
 var (
-	ErrUnsupportedSession = errors.New("host mount requires an SMB session")
-	ErrUnsafeMountConfig  = errors.New("unsafe SMB mount config")
+	ErrUnsupportedSession = errors.New("host mount requires an SMB or FTP session")
+	ErrUnsafeMountConfig  = errors.New("unsafe host mount config")
 )
 
 type Result struct {
 	MountPath      string `json:"mountPath"`
 	AlreadyMounted bool   `json:"alreadyMounted"`
+}
+
+type UnmountResult struct {
+	MountPath  string `json:"mountPath"`
+	WasMounted bool   `json:"wasMounted"`
 }
 
 func MountSMB(ctx context.Context, mountRoot string, cfg *sessions.SMBConfig) (*Result, error) {
@@ -72,6 +77,115 @@ func MountSMB(ctx context.Context, mountRoot string, cfg *sessions.SMBConfig) (*
 	}
 
 	return &Result{MountPath: mountPath}, nil
+}
+
+func MountFTP(ctx context.Context, mountRoot string, cfg *sessions.FTPConfig) (*Result, error) {
+	if cfg == nil {
+		return nil, ErrUnsupportedSession
+	}
+	if err := validateFTPConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	mountPath := FTPMountPath(mountRoot, *cfg)
+	if err := os.MkdirAll(mountPath, 0755); err != nil {
+		return nil, err
+	}
+
+	mounted, err := IsMounted(mountPath)
+	if err != nil {
+		return nil, err
+	}
+	if mounted {
+		return &Result{MountPath: mountPath, AlreadyMounted: true}, nil
+	}
+
+	configPath, remoteName, err := writeRcloneFTPConfig(ctx, mountRoot, *cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	remote := remoteName + ":"
+	if cfg.BasePath != "" {
+		remote += strings.TrimPrefix(cfg.BasePath, "/")
+	}
+
+	cmd := exec.CommandContext(
+		ctx,
+		"rclone",
+		"mount",
+		remote,
+		mountPath,
+		"--config", configPath,
+		"--vfs-cache-mode", "writes",
+		"--dir-cache-time", "30s",
+		"--poll-interval", "0",
+		"--daemon",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("rclone mount failed: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+
+	return &Result{MountPath: mountPath}, nil
+}
+
+func UnmountSMB(ctx context.Context, mountRoot string, cfg *sessions.SMBConfig) (*UnmountResult, error) {
+	if cfg == nil {
+		return nil, ErrUnsupportedSession
+	}
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
+	}
+	return unmountPath(ctx, MountPath(mountRoot, *cfg))
+}
+
+func UnmountFTP(ctx context.Context, mountRoot string, cfg *sessions.FTPConfig) (*UnmountResult, error) {
+	if cfg == nil {
+		return nil, ErrUnsupportedSession
+	}
+	if err := validateFTPConfig(cfg); err != nil {
+		return nil, err
+	}
+	return unmountPath(ctx, FTPMountPath(mountRoot, *cfg))
+}
+
+func unmountPath(ctx context.Context, mountPath string) (*UnmountResult, error) {
+	mounted, err := IsMounted(mountPath)
+	if err != nil {
+		return nil, err
+	}
+	if !mounted {
+		return &UnmountResult{MountPath: mountPath, WasMounted: false}, nil
+	}
+
+	cmd := exec.CommandContext(ctx, "fusermount3", "-u", mountPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		cmd = exec.CommandContext(ctx, "fusermount", "-u", mountPath)
+		output, err = cmd.CombinedOutput()
+	}
+	if err != nil {
+		cmd = exec.CommandContext(ctx, "umount", mountPath)
+		output, err = cmd.CombinedOutput()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("unmount failed: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+
+	return &UnmountResult{MountPath: mountPath, WasMounted: true}, nil
+}
+
+func FTPMountPath(mountRoot string, cfg sessions.FTPConfig) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		cfg.Host,
+		strconv.Itoa(cfg.Port),
+		cfg.BasePath,
+		cfg.Username,
+	}, "\x00")))
+	hash := hex.EncodeToString(sum[:])[:12]
+	name := sanitizeName(cfg.Host + "-ftp")
+	return filepath.Join(mountRoot, name+"-"+hash)
 }
 
 func MountPath(mountRoot string, cfg sessions.SMBConfig) string {
@@ -169,4 +283,66 @@ func sanitizeName(input string) string {
 func unescapeMountInfo(input string) string {
 	replacer := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
 	return replacer.Replace(input)
+}
+
+func validateFTPConfig(cfg *sessions.FTPConfig) error {
+	values := []string{cfg.Host, cfg.BasePath, cfg.Username, cfg.Password}
+	for _, value := range values {
+		if strings.ContainsAny(value, "\x00\n\r") {
+			return ErrUnsafeMountConfig
+		}
+	}
+	if cfg.Host == "" || cfg.Username == "" {
+		return ErrUnsafeMountConfig
+	}
+	if strings.ContainsAny(cfg.Host, "/\\,") || strings.Contains(cfg.BasePath, ",") {
+		return ErrUnsafeMountConfig
+	}
+	return nil
+}
+
+func writeRcloneFTPConfig(ctx context.Context, mountRoot string, cfg sessions.FTPConfig) (string, string, error) {
+	configDir := filepath.Join(mountRoot, ".rclone")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		return "", "", err
+	}
+
+	remoteName := sanitizeName(cfg.Host+"-ftp") + "-" + rcloneRemoteHash(cfg)
+	configPath := filepath.Join(configDir, remoteName+".conf")
+	obscuredPassword, err := obscureRclonePassword(ctx, cfg.Password)
+	if err != nil {
+		return "", "", err
+	}
+	content := "[" + remoteName + "]\n" +
+		"type = ftp\n" +
+		"host = " + cfg.Host + "\n" +
+		"user = " + cfg.Username + "\n" +
+		"pass = " + obscuredPassword + "\n"
+	if cfg.Port > 0 && cfg.Port != 21 {
+		content += "port = " + strconv.Itoa(cfg.Port) + "\n"
+	}
+
+	if err := os.WriteFile(configPath, []byte(content), 0600); err != nil {
+		return "", "", err
+	}
+	return configPath, remoteName, nil
+}
+
+func obscureRclonePassword(ctx context.Context, password string) (string, error) {
+	cmd := exec.CommandContext(ctx, "rclone", "obscure", password)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("rclone obscure failed: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func rcloneRemoteHash(cfg sessions.FTPConfig) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		cfg.Host,
+		strconv.Itoa(cfg.Port),
+		cfg.BasePath,
+		cfg.Username,
+	}, "\x00")))
+	return hex.EncodeToString(sum[:])[:12]
 }

@@ -1,6 +1,7 @@
 package hostmount
 
 import (
+	"context"
 	"hubfly-files/internal/sessions"
 	"path/filepath"
 	"strings"
@@ -28,5 +29,40 @@ func TestValidateConfigRejectsUnsafeValues(t *testing.T) {
 	cfg = sessions.SMBConfig{Host: "fileserver", Share: "team", Username: "ali\nce"}
 	if err := validateConfig(&cfg); err == nil {
 		t.Fatal("expected newline credential to be rejected")
+	}
+}
+
+func TestFTPMountPathIsStableAndScoped(t *testing.T) {
+	cfg := sessions.FTPConfig{Host: "FTP.EXAMPLE", Port: 21, BasePath: "public/games", Username: "anonymous"}
+	mountPath := FTPMountPath("/mnt/hubfiles", cfg)
+
+	if !strings.HasPrefix(mountPath, filepath.Join("/mnt/hubfiles", "ftp-example-ftp-")) {
+		t.Fatalf("mount path = %q", mountPath)
+	}
+	if mountPath != FTPMountPath("/mnt/hubfiles", cfg) {
+		t.Fatal("mount path is not stable")
+	}
+}
+
+func TestValidateFTPConfigRejectsUnsafeValues(t *testing.T) {
+	cfg := sessions.FTPConfig{Host: "ftp.example", BasePath: "good,bad", Username: "alice"}
+	if err := validateFTPConfig(&cfg); err == nil {
+		t.Fatal("expected unsafe base path to be rejected")
+	}
+
+	cfg = sessions.FTPConfig{Host: "ftp.example", BasePath: "public", Username: "ali\nce"}
+	if err := validateFTPConfig(&cfg); err == nil {
+		t.Fatal("expected newline credential to be rejected")
+	}
+}
+
+func TestUnmountFTPReturnsNotMounted(t *testing.T) {
+	cfg := sessions.FTPConfig{Host: "ftp.example", Port: 21, BasePath: "public", Username: "anonymous"}
+	result, err := UnmountFTP(context.Background(), t.TempDir(), &cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.WasMounted {
+		t.Fatal("expected unmount to report not mounted")
 	}
 }
