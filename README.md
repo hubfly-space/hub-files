@@ -83,7 +83,36 @@ HUBFILES_ALLOW_HOST_MOUNTS=true
 HUBFILES_MOUNT_ROOT=/mnt/hubfiles
 ```
 
-The service host must have CIFS support and `mount -t cifs` privileges. On most Linux installs that means installing `cifs-utils` and running the service with enough privileges to mount filesystems. HubFiles writes a `0600` credentials file under `${HUBFILES_MOUNT_ROOT}/.credentials` and mounts the share under `${HUBFILES_MOUNT_ROOT}`.
+The service host must have CIFS support and `mount -t cifs` privileges. On most Linux installs that means installing `cifs-utils` and running the service with enough privileges to mount and unmount filesystems. HubFiles writes a `0600` credentials file under `${HUBFILES_MOUNT_ROOT}/.credentials`, mounts the share under `${HUBFILES_MOUNT_ROOT}`, and can unmount it again from the toolbar.
+
+
+## Native FTP sessions
+
+HubFiles can also browse FTP servers directly. Create a session with an `ftp://host/optional/base/path` root and pass credentials in the session request body:
+
+```json
+{
+  "root": "ftp://fileserver/public/docs",
+  "ttlSeconds": 3600,
+  "readonly": false,
+  "allowUpload": true,
+  "allowEdit": true,
+  "allowDelete": true,
+  "ftpUsername": "alice",
+  "ftpPassword": "secret"
+}
+```
+
+If `ftpUsername` is blank, HubFiles uses anonymous FTP credentials: username `anonymous` and password `anonymous@`. Current FTP support covers browsing, reading/downloading, editing, uploading, creating folders/files, renaming, and deleting. FTP storage capacity is reported as unknown, and ZIP/extract remain local-filesystem-only.
+
+FTP host mounting is available through `rclone mount` and uses the same host-mount flag:
+
+```bash
+HUBFILES_ALLOW_HOST_MOUNTS=true
+HUBFILES_MOUNT_ROOT=/mnt/hubfiles
+```
+
+The service host must have `rclone` installed with FUSE mount permissions. HubFiles writes a `0600` rclone config under `${HUBFILES_MOUNT_ROOT}/.rclone`, mounts FTP sessions under `${HUBFILES_MOUNT_ROOT}`, and can unmount them again from the toolbar.
 
 ## API documentation
 

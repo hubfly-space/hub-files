@@ -181,13 +181,34 @@ function App() {
     try {
       const result = await api.hostMount();
       toast({
-        title: result.alreadyMounted ? "Already mounted" : "SMB mounted",
+        title: result.alreadyMounted ? "Already mounted" : "Mounted",
         description: `Available on this machine at ${result.mountPath}`,
       });
     } catch (err: unknown) {
       toast({
         title: "Mount failed",
-        description: err instanceof Error ? err.message : "Unable to mount SMB share",
+        description: err instanceof Error ? err.message : "Unable to mount remote share",
+        variant: "destructive",
+      });
+    } finally {
+      setHostMounting(false);
+    }
+  };
+
+  const handleHostUnmount = async () => {
+    setHostMounting(true);
+    try {
+      const result = await api.hostUnmount();
+      toast({
+        title: result.wasMounted ? "Unmounted" : "Not mounted",
+        description: result.wasMounted
+          ? `Removed host mount at ${result.mountPath}`
+          : `No active host mount at ${result.mountPath}`,
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "Unmount failed",
+        description: err instanceof Error ? err.message : "Unable to unmount remote share",
         variant: "destructive",
       });
     } finally {
@@ -248,9 +269,10 @@ function App() {
             onClearSelection={clearSelection}
             fileInputRef={fileInputRef}
             onFileChange={handleFileChange}
-            canHostMount={session?.type === "smb" && session.canHostMount}
+            canHostMount={Boolean(session?.canHostMount)}
             hostMounting={hostMounting}
             onHostMount={handleHostMount}
+            onHostUnmount={handleHostUnmount}
           />
         )}
 
