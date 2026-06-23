@@ -18,7 +18,7 @@ export interface StorageInfo {
 
 export interface SessionInfo {
   root: string;
-  type: "local" | "smb";
+  type: "local" | "smb" | "ftp";
   canHostMount: boolean;
   hostMountRoot?: string;
   readonly: boolean;
@@ -30,6 +30,11 @@ export interface SessionInfo {
 export interface HostMountResult {
   mountPath: string;
   alreadyMounted: boolean;
+}
+
+export interface HostUnmountResult {
+  mountPath: string;
+  wasMounted: boolean;
 }
 
 export const api = {
@@ -53,6 +58,15 @@ export const api = {
 
   hostMount: async (): Promise<HostMountResult> => {
     const res = await fetch(`${API_BASE}/host-mount`, {
+      method: "POST",
+      headers: api.headers(),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  hostUnmount: async (): Promise<HostUnmountResult> => {
+    const res = await fetch(`${API_BASE}/host-unmount`, {
       method: "POST",
       headers: api.headers(),
     });

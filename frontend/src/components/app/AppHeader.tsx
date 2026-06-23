@@ -35,6 +35,7 @@ type AppHeaderProps = {
   canHostMount?: boolean;
   hostMounting?: boolean;
   onHostMount?: () => void;
+  onHostUnmount?: () => void;
 };
 
 export function AppHeader({
@@ -60,6 +61,7 @@ export function AppHeader({
   canHostMount,
   hostMounting,
   onHostMount,
+  onHostUnmount,
 }: AppHeaderProps) {
   return (
     <header className="shrink-0 border-b border-border/40 bg-background/95 backdrop-blur-xl z-30 px-6 py-4">
@@ -106,6 +108,7 @@ export function AppHeader({
           canHostMount={canHostMount}
           hostMounting={hostMounting}
           onHostMount={onHostMount}
+          onHostUnmount={onHostUnmount}
         />
       </div>
 
