@@ -57,11 +57,7 @@ func main() {
 		return
 	}
 
-	sessionStore := sessions.NewStore()
-	srv := server.NewServer(cfg, sessionStore)
-
-	// intialize db
-
+	// Initialize db before building the server so search/indexing can be wired in.
 	store, err := sqlite.New("hubfiles.sqlite")
 	if err != nil {
 		log.Printf("warning: database disabled: %v", err)
@@ -70,6 +66,11 @@ func main() {
 	if store != nil {
 		defer store.Close()
 	}
+
+	sessionStore := sessions.NewStore()
+	srv := server.NewServer(cfg, sessionStore, store)
+	defer srv.Close()
+
 	//initialize server
 	apiMux := srv.SetupRoutes()
 	mgmtMux := srv.SetupManagementRoutes()

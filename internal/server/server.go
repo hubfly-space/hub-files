@@ -10,7 +10,10 @@ import (
 	"hubfly-files/internal/filebackend"
 	"hubfly-files/internal/filesystem"
 	"hubfly-files/internal/hostmount"
+	"hubfly-files/internal/indexer"
+	"hubfly-files/internal/search"
 	"hubfly-files/internal/sessions"
+	"hubfly-files/internal/sqlite"
 	"io"
 	"log"
 	"net"
@@ -39,17 +42,33 @@ type Server struct {
 	Sessions *sessions.Store
 	SMBPool  *filebackend.SMBPool
 	FTPPool  *filebackend.FTPPool
-	// Store    *sqlite.Storage
+	Store    *sqlite.Storage
+	Search   *search.Service
+	Indexer  *indexer.Manager
 }
 
-func NewServer(cfg *config.Config, store *sessions.Store) *Server {
-	return &Server{
+func NewServer(cfg *config.Config, store *sessions.Store, db *sqlite.Storage) *Server {
+	srv := &Server{
 		Config:   cfg,
 		Sessions: store,
 		SMBPool:  filebackend.NewSMBPool(),
 		FTPPool:  filebackend.NewFTPPool(),
-		// Store:    db,
 	}
+
+	if db != nil {
+		srv.Store = db
+		srv.Search = search.New(db)
+		srv.Indexer = indexer.NewManager(db)
+	}
+
+	return srv
+}
+
+func (s *Server) Close() error {
+	if s.Indexer != nil {
+		return s.Indexer.Close()
+	}
+	return nil
 }
 
 // maxBytesMiddleware limits the request body size
@@ -602,6 +621,26 @@ func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(storage)
 }
 
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	if s.Search == nil {
+		http.Error(w, "Search unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	root := r.Header.Get("X-Session-Root")
+	query := r.URL.Query().Get("q")
+
+	results, err := s.Search.Search(root, query)
+	if err != nil {
+		log.Printf("Search error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
 func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 
@@ -976,6 +1015,12 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.Indexer != nil && smbCfg == nil && ftpCfg == nil {
+		if err := s.Indexer.EnsureRoot(root); err != nil {
+			log.Printf("Index root error for %s: %v", root, err)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(session)
 }
@@ -1023,6 +1068,7 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux.HandleFunc("/api/host-unmount", s.authMiddleware(methodHandlers([]string{http.MethodPost}, s.handleHostUnmount)))
 	mux.HandleFunc("/api/list", s.authMiddleware(methodHandlers([]string{http.MethodGet}, s.handleList)))
 	mux.HandleFunc("/api/storage", s.authMiddleware(methodHandlers([]string{http.MethodGet}, s.handleStorage)))
+	mux.HandleFunc("/api/search", s.authMiddleware(methodHandlers([]string{http.MethodGet}, s.handleSearch)))
 	mux.HandleFunc("/api/file", s.authMiddleware(methodHandlers([]string{http.MethodGet, http.MethodPut}, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			s.handleGetFile(w, r)

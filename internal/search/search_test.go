@@ -74,7 +74,7 @@ func TestSearch(t *testing.T) {
 		}
 	}
 
-	results, err := s.Search("readme")
+	results, err := s.Search("/tmp/root", "readme")
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestSearchNoResults(t *testing.T) {
 		t.Fatalf("IndexFile returned error: %v", err)
 	}
 
-	results, err := s.Search("something-that-does-not-exist")
+	results, err := s.Search("/tmp/root", "something-that-does-not-exist")
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
