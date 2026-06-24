@@ -136,8 +136,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
   // }
 
   const session = api.getToken();
-  // const fileUrl = `/api/file?path=${encodeURIComponent(path)}&session=${session}`;
-  const fileUrl = `http://localhost:10015/api/file?path=${encodeURIComponent(path)}&session=${session}`;
+  const fileUrl = `/api/file?path=${encodeURIComponent(path)}&session=${session}`;
 
   return (
     <div className="flex flex-col h-full bg-card rounded-[2rem] border border-border/50 shadow-2xl overflow-hidden relative">
