@@ -1,9 +1,9 @@
 package search
 
 import (
-	"fmt"
+	"strings"
+
 	"hubfly-files/internal/sqlite"
-	"os"
 )
 
 type Service struct {
@@ -11,77 +11,46 @@ type Service struct {
 }
 
 type SearchResult struct {
-	BaseName string
-	RelPath  string
+	BaseName string `json:"baseName"`
+	RelPath  string `json:"relPath"`
+	IsDir    bool   `json:"isDir"`
+	Size     int64  `json:"size"`
+	ModTime  string `json:"modTime"`
 }
 
-func (s *Service) Search(query string) ([]SearchResult, error) {
-	rows, err := s.store.GetSearchResult(query)
+func New(store *sqlite.Storage) *Service {
+	return &Service{store: store}
+}
+
+func (s *Service) Search(root, query string) ([]SearchResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return []SearchResult{}, nil
+	}
+
+	rows, err := s.store.SearchFiles(root, quoteFTS5(query), 50)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	results := make([]SearchResult, 0)
-
-	for rows.Next() {
-		var r SearchResult
-		var rank float64
-
-		if err = rows.Scan(&r.BaseName, &r.RelPath, &rank); err != nil {
-			return nil, err
-		}
-
-		results = append(results, r)
+	results := make([]SearchResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, SearchResult{
+			BaseName: row.BaseName,
+			RelPath:  row.RelPath,
+			IsDir:    row.IsDir,
+			Size:     row.Size,
+			ModTime:  row.ModTime,
+		})
 	}
 
 	return results, nil
-
 }
 
-func (s *Service) InsertIndex(f *sqlite.FileEntries) error {
-	r, err := s.store.RegisterFileEntry(f)
-
-	if err != nil {
-		fmt.Printf("Error occured when indexing the file,%v", err)
-		return err
-	}
-
-	r_id, err := r.LastInsertId()
-
-	if err != nil {
-		return fmt.Errorf("indexing file entry: %w", err)
-	}
-	fi := &sqlite.FileIndex{
-		Id:       r_id,
-		BaseName: f.BaseName,
-		RelPath:  f.RelPath,
-	}
-	if err := s.store.RegisterFileIndex(fi); err != nil {
-		fmt.Printf("Error occured when indexing the file,%v", err)
-		return err
-	}
-	return nil
+func (s *Service) IndexFile(f *sqlite.FileEntries) error {
+	return s.store.UpsertFileEntry(f)
 }
 
-func IndexFile(root string) error {
-
-	f, err := os.Open(root)
-	if err != nil {
-		return err
-	}
-
-	defer f.Close()
-
-	for {
-
-		entries, err := f.ReadDir(100)
-
-		for _, entry := range entries {
-
-
-		}
-
-	}
-
+func quoteFTS5(query string) string {
+	return `"` + strings.ReplaceAll(query, `"`, `""`) + `"`
 }

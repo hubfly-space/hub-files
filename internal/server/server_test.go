@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestServer(t *testing.T) (*Server, string) {
@@ -173,6 +174,62 @@ func TestDemoStorageReturnsFakeValues(t *testing.T) {
 	}
 	if storage.UsedPercent != 25 {
 		t.Fatalf("usedPercent = %v", storage.UsedPercent)
+	}
+}
+
+func TestSearchEndpointReturnsRootScopedResults(t *testing.T) {
+	srv, tmpDir := newTestServer(t)
+	token := createTestSession(t, srv, tmpDir, true)
+
+	if err := srv.Store.UpsertFileEntry(&sqlite.FileEntries{
+		Root:       tmpDir,
+		RelPath:    "docs/readme.md",
+		BaseName:   "readme.md",
+		ParentPath: "docs",
+		IsDir:      false,
+		Size:       12,
+		ModTime:    time.Now(),
+		Extension:  ".md",
+	}); err != nil {
+		t.Fatalf("UpsertFileEntry() error = %v", err)
+	}
+
+	if err := srv.Store.UpsertFileEntry(&sqlite.FileEntries{
+		Root:       filepath.Join(tmpDir, "other"),
+		RelPath:    "docs/readme.md",
+		BaseName:   "readme.md",
+		ParentPath: "docs",
+		IsDir:      false,
+		Size:       12,
+		ModTime:    time.Now(),
+		Extension:  ".md",
+	}); err != nil {
+		t.Fatalf("other root UpsertFileEntry() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/search?q=readme", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+
+	srv.SetupRoutes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var results []struct {
+		BaseName string `json:"baseName"`
+		RelPath  string `json:"relPath"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&results); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 root-scoped result, got %d: %+v", len(results), results)
+	}
+	if results[0].BaseName != "readme.md" || results[0].RelPath != "docs/readme.md" {
+		t.Fatalf("unexpected search result: %+v", results[0])
 	}
 }
 
