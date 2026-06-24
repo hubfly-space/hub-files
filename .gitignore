@@ -2,7 +2,7 @@
 
 # Go
 bin/
-hubfly-files
+
 *.exe
 *.test
 *.prof

@@ -8,6 +8,14 @@ export interface FileInfo {
   modTime: string;
 }
 
+export interface SearchResult {
+  baseName: string;
+  relPath: string;
+  isDir: boolean;
+  size: number;
+  modTime: string;
+}
+
 export interface StorageInfo {
   path: string;
   totalBytes: number;
@@ -45,6 +53,14 @@ export const api = {
         headers: api.headers(),
       },
     );
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  search: async (query: string): Promise<SearchResult[]> => {
+    const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`, {
+      headers: api.headers(),
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
