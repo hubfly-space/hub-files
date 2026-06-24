@@ -42,6 +42,10 @@ cp "${ROOT_DIR}/packaging/hubfly-files.env.example" "${PACKAGE_DIR}/config/"
 cp "${ROOT_DIR}/demo/README.md" "${PACKAGE_DIR}/demo/README.md"
 cp "${ROOT_DIR}/scripts/install.sh" "${PACKAGE_DIR}/"
 cp "${ROOT_DIR}/README.md" "${PACKAGE_DIR}/README.md"
+cp "${ROOT_DIR}/LICENSE" "${PACKAGE_DIR}/LICENSE"
+cp "${ROOT_DIR}/CONTRIBUTING.md" "${PACKAGE_DIR}/CONTRIBUTING.md"
+mkdir -p "${PACKAGE_DIR}/docs"
+cp "${ROOT_DIR}/docs/USAGE.md" "${PACKAGE_DIR}/docs/USAGE.md"
 
 tar -C "${OUT_DIR}" -czf "${ARCHIVE_PATH}" "${ASSET_BASENAME}"
 (
