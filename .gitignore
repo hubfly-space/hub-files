@@ -1,22 +1,26 @@
-
-
-# Go
+# Go build/test output
 bin/
-
 *.exe
 *.test
 *.prof
-go.sum
 
-# Node.js
+# Frontend dependencies and build output
 node_modules/
-dist/
-.DS_Store
-.env
-*.log
 frontend/node_modules/
+dist/
 frontend/dist/
-package-lock.json
-bun.lockb
 
+# Runtime data
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+data/*.sqlite
+
+# Local configuration and logs
+.env
+*.env.local
+*.log
 sec.md
+
+# OS/editor files
+.DS_Store
