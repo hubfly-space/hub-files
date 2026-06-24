@@ -81,9 +81,13 @@ If you also want users to mount the connected SMB share onto the HubFiles host m
 ```bash
 HUBFILES_ALLOW_HOST_MOUNTS=true
 HUBFILES_MOUNT_ROOT=/mnt/hubfiles
+HUBFILES_HOST_MOUNT_CONFIG_ROOT=/var/lib/hubfiles/hostmount
+HUBFILES_HOST_MOUNT_UID=1000
+HUBFILES_HOST_MOUNT_GID=1000
+HUBFILES_HOST_MOUNT_UMASK=002
 ```
 
-The service host must have CIFS support and `mount -t cifs` privileges. On most Linux installs that means installing `cifs-utils` and running the service with enough privileges to mount and unmount filesystems. HubFiles writes a `0600` credentials file under `${HUBFILES_MOUNT_ROOT}/.credentials`, mounts the share under `${HUBFILES_MOUNT_ROOT}`, and can unmount it again from the toolbar.
+The service host must have CIFS support and `mount -t cifs` privileges. On most Linux installs that means installing `cifs-utils` and running the service with enough privileges to mount and unmount filesystems. HubFiles writes a `0600` credentials file under `${HUBFILES_HOST_MOUNT_CONFIG_ROOT}/credentials`, mounts the share under `${HUBFILES_MOUNT_ROOT}`, and can unmount it again from the toolbar.
 
 
 ## Native FTP sessions
@@ -112,7 +116,7 @@ HUBFILES_ALLOW_HOST_MOUNTS=true
 HUBFILES_MOUNT_ROOT=/mnt/hubfiles
 ```
 
-The service host must have `rclone` installed with FUSE mount permissions. HubFiles writes a `0600` rclone config under `${HUBFILES_MOUNT_ROOT}/.rclone`, mounts FTP sessions under `${HUBFILES_MOUNT_ROOT}`, and can unmount them again from the toolbar.
+The service host must have `rclone` installed with FUSE mount permissions. HubFiles writes a `0600` rclone config under `${HUBFILES_HOST_MOUNT_CONFIG_ROOT}/rclone`, mounts FTP sessions under `${HUBFILES_MOUNT_ROOT}`, and can unmount them again from the toolbar. Keep `${HUBFILES_MOUNT_ROOT}` as the user-facing folder and `${HUBFILES_HOST_MOUNT_CONFIG_ROOT}` as private app state. If the service runs as root, set `${HUBFILES_HOST_MOUNT_UID}` and `${HUBFILES_HOST_MOUNT_GID}` to the desktop user so file managers and editors can read the FUSE mount.
 
 ## API documentation
 

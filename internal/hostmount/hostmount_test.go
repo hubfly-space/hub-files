@@ -3,6 +3,7 @@ package hostmount
 import (
 	"context"
 	"hubfly-files/internal/sessions"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -64,5 +65,25 @@ func TestUnmountFTPReturnsNotMounted(t *testing.T) {
 	}
 	if result.WasMounted {
 		t.Fatal("expected unmount to report not mounted")
+	}
+}
+
+func TestUnmountFTPRemovesStaleMountPoint(t *testing.T) {
+	mountRoot := t.TempDir()
+	cfg := sessions.FTPConfig{Host: "ftp.example", Port: 21, BasePath: "public", Username: "anonymous"}
+	mountPath := FTPMountPath(mountRoot, cfg)
+	if err := os.MkdirAll(mountPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := UnmountFTP(context.Background(), mountRoot, &cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.WasMounted {
+		t.Fatal("expected stale mount point to report not mounted")
+	}
+	if _, err := os.Stat(mountPath); !os.IsNotExist(err) {
+		t.Fatalf("expected stale mount point to be removed, got err=%v", err)
 	}
 }

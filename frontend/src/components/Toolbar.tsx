@@ -130,6 +130,51 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 ml-auto">
+          {canHostMount && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={onHostMount}
+                    disabled={hostMounting}
+                    className="h-10 w-10 rounded-xl bg-secondary/50 hover:bg-primary hover:text-primary-foreground transition-all"
+                  >
+                    <HardDriveDownload
+                      className={cn(
+                        "w-4.5 h-4.5",
+                        hostMounting && "animate-pulse",
+                      )}
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Mount on this machine</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={onHostUnmount}
+                    disabled={hostMounting}
+                    className="h-10 w-10 rounded-xl bg-secondary/50 hover:bg-destructive hover:text-destructive-foreground transition-all"
+                  >
+                    <HardDriveUpload
+                      className={cn(
+                        "w-4.5 h-4.5",
+                        hostMounting && "animate-pulse",
+                      )}
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Unmount from this machine</TooltipContent>
+              </Tooltip>
+
+              <div className="w-px h-6 bg-border/60 mx-1" />
+            </>
+          )}
+
           <AnimatePresence mode="wait">
             {selectedCount > 0 ? (
               <motion.div
@@ -207,41 +252,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     {selectionMode ? "Exit Selection" : "Enter Selection Mode"}
                   </TooltipContent>
                 </Tooltip>
-
-                {canHostMount && (
-                  <>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          onClick={onHostMount}
-                          disabled={hostMounting}
-                          className="h-10 w-10 rounded-xl bg-secondary/50 hover:bg-primary hover:text-primary-foreground transition-all"
-                        >
-                          <HardDriveDownload className={cn("w-4.5 h-4.5", hostMounting && "animate-pulse")} />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Mount on this machine</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          onClick={onHostUnmount}
-                          disabled={hostMounting}
-                          className="h-10 w-10 rounded-xl bg-secondary/50 hover:bg-destructive hover:text-destructive-foreground transition-all"
-                        >
-                          <HardDriveUpload className={cn("w-4.5 h-4.5", hostMounting && "animate-pulse")} />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Unmount from this machine</TooltipContent>
-                    </Tooltip>
-                  </>
-                )}
-
-                <div className="w-px h-6 bg-border/60 mx-1" />
 
                 <Tooltip>
                   <TooltipTrigger asChild>

@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"os"
+	"path/filepath"
 	"strconv"
 )
 
@@ -16,13 +17,17 @@ func firstEnv(names ...string) string {
 }
 
 type Config struct {
-	APIPort         string
-	ManagementPort  string
-	DemoDir         string
-	UIDir           string
-	MaxUploadBytes  int64
-	AllowHostMounts bool
-	HostMountRoot   string
+	APIPort             string
+	ManagementPort      string
+	DemoDir             string
+	UIDir               string
+	MaxUploadBytes      int64
+	AllowHostMounts     bool
+	HostMountRoot       string
+	HostMountConfigRoot string
+	HostMountUID        int
+	HostMountGID        int
+	HostMountUmask      string
 }
 
 func LoadConfig() *Config {
@@ -33,6 +38,10 @@ func LoadConfig() *Config {
 	maxUploadBytes := flag.Int64("max-upload-bytes", 100<<20, "Maximum upload size in bytes (0 disables the limit)")
 	allowHostMounts := flag.Bool("allow-host-mounts", false, "Allow remote sessions to mount on this host")
 	hostMountRoot := flag.String("host-mount-root", "/mnt/hubfiles", "Directory for host mounts")
+	hostMountConfigRoot := flag.String("host-mount-config-root", defaultHostMountConfigRoot(), "Private directory for host mount config and credentials")
+	hostMountUID := flag.Int("host-mount-uid", defaultHostMountUID(), "UID that should own host-mounted files")
+	hostMountGID := flag.Int("host-mount-gid", defaultHostMountGID(), "GID that should own host-mounted files")
+	hostMountUmask := flag.String("host-mount-umask", "002", "Umask for host-mounted files")
 
 	flag.Parse()
 
@@ -62,14 +71,62 @@ func LoadConfig() *Config {
 	if d := firstEnv("HUBFILES_MOUNT_ROOT", "HUBFLY_MOUNT_ROOT"); d != "" {
 		*hostMountRoot = d
 	}
+	if d := firstEnv("HUBFILES_HOST_MOUNT_CONFIG_ROOT", "HUBFLY_HOST_MOUNT_CONFIG_ROOT"); d != "" {
+		*hostMountConfigRoot = d
+	}
+	if v := firstEnv("HUBFILES_HOST_MOUNT_UID", "HUBFLY_HOST_MOUNT_UID"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 0 {
+			*hostMountUID = parsed
+		}
+	}
+	if v := firstEnv("HUBFILES_HOST_MOUNT_GID", "HUBFLY_HOST_MOUNT_GID"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 0 {
+			*hostMountGID = parsed
+		}
+	}
+	if v := firstEnv("HUBFILES_HOST_MOUNT_UMASK", "HUBFLY_HOST_MOUNT_UMASK"); v != "" {
+		*hostMountUmask = v
+	}
 
 	return &Config{
-		APIPort:         *apiPort,
-		ManagementPort:  *mgmtPort,
-		DemoDir:         *demoDir,
-		UIDir:           *uiDir,
-		MaxUploadBytes:  *maxUploadBytes,
-		AllowHostMounts: *allowHostMounts,
-		HostMountRoot:   *hostMountRoot,
+		APIPort:             *apiPort,
+		ManagementPort:      *mgmtPort,
+		DemoDir:             *demoDir,
+		UIDir:               *uiDir,
+		MaxUploadBytes:      *maxUploadBytes,
+		AllowHostMounts:     *allowHostMounts,
+		HostMountRoot:       *hostMountRoot,
+		HostMountConfigRoot: *hostMountConfigRoot,
+		HostMountUID:        *hostMountUID,
+		HostMountGID:        *hostMountGID,
+		HostMountUmask:      *hostMountUmask,
 	}
+}
+
+func defaultHostMountConfigRoot() string {
+	if configDir, err := os.UserConfigDir(); err == nil && configDir != "" {
+		return filepath.Join(configDir, "hubfiles", "hostmount")
+	}
+	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
+		return filepath.Join(homeDir, ".config", "hubfiles", "hostmount")
+	}
+	return filepath.Join(os.TempDir(), "hubfiles-hostmount")
+}
+
+func defaultHostMountUID() int {
+	if value := os.Getenv("SUDO_UID"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed >= 0 {
+			return parsed
+		}
+	}
+	return os.Getuid()
+}
+
+func defaultHostMountGID() int {
+	if value := os.Getenv("SUDO_GID"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed >= 0 {
+			return parsed
+		}
+	}
+	return os.Getgid()
 }

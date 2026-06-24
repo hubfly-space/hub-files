@@ -148,8 +148,9 @@ rclone mount remote:path /mnt/hubfiles/... --daemon
 Main responsibilities:
 
 - build a stable mount path under `HUBFILES_MOUNT_ROOT`
-- write a `0600` CIFS credentials file
-- write a `0600` rclone config for FTP host mounts
+- keep `HUBFILES_MOUNT_ROOT` clean so users only see mounted folders
+- write a `0600` CIFS credentials file under `HUBFILES_HOST_MOUNT_CONFIG_ROOT/credentials`
+- write a `0600` rclone config for FTP host mounts under `HUBFILES_HOST_MOUNT_CONFIG_ROOT/rclone`
 - check `/proc/self/mountinfo` to avoid mounting the same target twice
 - check `/proc/self/mountinfo` before unmounting so repeated unmount clicks are safe
 - reject unsafe values that could corrupt mount options
@@ -274,6 +275,7 @@ Adds host mount configuration:
 ```bash
 HUBFILES_ALLOW_HOST_MOUNTS=true
 HUBFILES_MOUNT_ROOT=/mnt/hubfiles
+HUBFILES_HOST_MOUNT_CONFIG_ROOT=/var/lib/hubfiles/hostmount
 ```
 
 The code still accepts old `HUBFLY_*` environment variables as fallbacks to avoid breaking existing installs.
@@ -361,6 +363,7 @@ Adds example config:
 ```bash
 HUBFILES_ALLOW_HOST_MOUNTS=false
 HUBFILES_MOUNT_ROOT=/mnt/hubfiles
+HUBFILES_HOST_MOUNT_CONFIG_ROOT=/var/lib/hubfiles/hostmount
 ```
 
 ## Data Flow: Native SMB Browsing

@@ -485,6 +485,14 @@ func (s *Server) handleSessionInfo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func (s *Server) hostMountOptions() hostmount.Options {
+	return hostmount.Options{
+		UID:   s.Config.HostMountUID,
+		GID:   s.Config.HostMountGID,
+		Umask: s.Config.HostMountUmask,
+	}
+}
+
 func (s *Server) handleHostMount(w http.ResponseWriter, r *http.Request) {
 	session := sessionFromRequest(r)
 	if session == nil {
@@ -499,13 +507,13 @@ func (s *Server) handleHostMount(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Host mounts are disabled", http.StatusForbidden)
 			return
 		}
-		result, err = hostmount.MountSMB(r.Context(), s.Config.HostMountRoot, session.SMB)
+		result, err = hostmount.MountSMB(r.Context(), s.Config.HostMountRoot, s.Config.HostMountConfigRoot, session.SMB, s.hostMountOptions())
 	} else if session.FTP != nil {
 		if !s.Config.AllowHostMounts {
 			http.Error(w, "Host mounts are disabled", http.StatusForbidden)
 			return
 		}
-		result, err = hostmount.MountFTP(r.Context(), s.Config.HostMountRoot, session.FTP)
+		result, err = hostmount.MountFTP(r.Context(), s.Config.HostMountRoot, s.Config.HostMountConfigRoot, session.FTP, s.hostMountOptions())
 	} else {
 		http.Error(w, "Host mount requires an SMB or FTP session", http.StatusBadRequest)
 		return
