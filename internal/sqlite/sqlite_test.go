@@ -144,7 +144,7 @@ func TestRegisterFileEntry(t *testing.T) {
 	}
 }
 
-func TestRegisterFileEntryRejectsDuplicateRelPath(t *testing.T) {
+func TestRegisterFileEntryUpsertsByRootAndRelPath(t *testing.T) {
 	store := newTestStorage(t)
 
 	entry := &FileEntries{
@@ -162,8 +162,39 @@ func TestRegisterFileEntryRejectsDuplicateRelPath(t *testing.T) {
 		t.Fatalf("first RegisterFileEntry() error = %v", err)
 	}
 
-	if _, err := store.RegisterFileEntry(entry); err == nil {
-		t.Fatal("expected duplicate rel_path error, got nil")
+	updated := *entry
+	updated.Size = 240
+	updated.BaseName = "readme-renamed.md"
+
+	if _, err := store.RegisterFileEntry(&updated); err != nil {
+		t.Fatalf("second RegisterFileEntry() error = %v", err)
+	}
+
+	otherRoot := *entry
+	otherRoot.Root = "/tmp/other-root"
+	if _, err := store.RegisterFileEntry(&otherRoot); err != nil {
+		t.Fatalf("other root RegisterFileEntry() error = %v", err)
+	}
+
+	var count int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM files WHERE rel_path = ?`, entry.RelPath).Scan(&count); err != nil {
+		t.Fatalf("count files error = %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 root-scoped rows, got %d", count)
+	}
+
+	var gotSize int64
+	var gotBaseName string
+	if err := store.db.QueryRow(`
+		SELECT size, base_name
+		FROM files
+		WHERE root = ? AND rel_path = ?
+	`, entry.Root, entry.RelPath).Scan(&gotSize, &gotBaseName); err != nil {
+		t.Fatalf("query updated file error = %v", err)
+	}
+	if gotSize != updated.Size || gotBaseName != updated.BaseName {
+		t.Fatalf("expected updated row size/base_name %d/%q, got %d/%q", updated.Size, updated.BaseName, gotSize, gotBaseName)
 	}
 }
 
