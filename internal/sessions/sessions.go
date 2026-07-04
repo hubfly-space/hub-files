@@ -24,6 +24,7 @@ type Session struct {
 	AllowDelete bool       `json:"allowDelete"`
 	SMB         *SMBConfig `json:"-"`
 	FTP         *FTPConfig `json:"-"`
+	S3          *S3Config  `json:"-"`
 }
 
 type SMBConfig struct {
@@ -45,6 +46,16 @@ type FTPConfig struct {
 	Password string
 }
 
+type S3Config struct {
+	Endpoint  string
+	Region    string
+	Bucket    string
+	AccessKey string
+	SecretKey string
+	BasePath  string
+	UseSSL    bool
+}
+
 type Store struct {
 	sessions    map[string]*Session
 	mu          sync.RWMutex
@@ -64,18 +75,22 @@ func NewStore() *Store {
 }
 
 func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool) (*Session, error) {
-	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, nil)
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, nil, nil)
 }
 
 func (s *Store) CreateSMBSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, smb *SMBConfig) (*Session, error) {
-	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, smb, nil)
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, smb, nil, nil)
 }
 
 func (s *Store) CreateFTPSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, ftp *FTPConfig) (*Session, error) {
-	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, ftp)
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, ftp, nil)
 }
 
-func (s *Store) createSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, smb *SMBConfig, ftp *FTPConfig) (*Session, error) {
+func (s *Store) CreateS3Session(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, s3 *S3Config) (*Session, error) {
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, nil, s3)
+}
+
+func (s *Store) createSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, smb *SMBConfig, ftp *FTPConfig, s3 *S3Config) (*Session, error) {
 	// Rate limiting: max 10 session creations per minute
 	s.createMu.Lock()
 	now := time.Now()
@@ -110,6 +125,7 @@ func (s *Store) createSession(root string, ttlSeconds int, readonly bool, allowU
 		AllowDelete: allowDelete,
 		SMB:         smb,
 		FTP:         ftp,
+		S3:          s3,
 	}
 
 	s.mu.Lock()

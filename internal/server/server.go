@@ -509,6 +509,15 @@ func (s *Server) checkPermission(w http.ResponseWriter, r *http.Request, permFla
 func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 0 {
+		limit = 0
+	}
+
 	files, err := s.backendForRequest(r).List(r.Context(), path)
 	if err != nil {
 		log.Printf("List error: %v", err)
@@ -516,8 +525,35 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slices.SortFunc(files, func(a, b filesystem.FileInfo) int {
+		if a.IsDir != b.IsDir {
+			if a.IsDir {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
+
+	total := len(files)
+
+	if limit > 0 {
+		if offset >= total {
+			files = nil
+		} else {
+			end := offset + limit
+			if end > total {
+				end = total
+			}
+			files = files[offset:end]
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(files)
+	json.NewEncoder(w).Encode(map[string]any{
+		"items": files,
+		"total": total,
+	})
 }
 
 func (s *Server) handleSessionInfo(w http.ResponseWriter, r *http.Request) {
