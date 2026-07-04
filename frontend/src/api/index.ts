@@ -50,6 +50,11 @@ export interface SearchResult {
   modTime: string;
 }
 
+export interface ListResult {
+  items: FileInfo[];
+  total: number;
+}
+
 export interface StorageInfo {
   path: string;
   totalBytes: number;
@@ -115,13 +120,16 @@ export const api = {
     return res.json();
   },
 
-  list: async (path: string): Promise<FileInfo[]> => {
-    const res = await fetch(
-      `${API_BASE}/list?path=${encodeURIComponent(path)}`,
-      {
-        headers: api.headers(),
-      },
-    );
+  list: async (
+    path: string,
+    options?: { offset?: number; limit?: number },
+  ): Promise<ListResult> => {
+    const params = new URLSearchParams({ path });
+    if (options?.offset) params.set("offset", String(options.offset));
+    if (options?.limit) params.set("limit", String(options.limit));
+    const res = await fetch(`${API_BASE}/list?${params}`, {
+      headers: api.headers(),
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },

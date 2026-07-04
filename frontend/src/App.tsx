@@ -80,6 +80,9 @@ function App() {
     createFile,
     zipItem,
     extractItem,
+    total,
+    hasMore,
+    loadMore,
   } = useFileSystem();
 
   const { toast } = useToast();
@@ -422,6 +425,8 @@ function App() {
             viewMode={viewMode}
             selectedItems={selectedItems}
             selectionMode={selectionMode}
+            total={total}
+            hasMore={hasMore}
             onCloseFile={() => setOpenFile(null)}
             onRefresh={refresh}
             onNavigate={handleNavigate}
@@ -449,6 +454,7 @@ function App() {
               });
             }}
             onMove={handleMove}
+            onLoadMore={loadMore}
           />
         </main>
       </div>
