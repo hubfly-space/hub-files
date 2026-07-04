@@ -862,8 +862,9 @@ func (s *Server) handleChunkedUpload(w http.ResponseWriter, r *http.Request, b f
 		uploadID = fmt.Sprintf("%d", time.Now().UnixNano())
 	}
 
-	// Each upload gets its own temp directory to avoid conflicts
-	chunkDir := filepath.Join(os.TempDir(), uploadsTempPrefix, uploadID)
+	safeDir := filepath.Base(uploadID)
+
+	chunkDir := filepath.Join(os.TempDir(), uploadsTempPrefix, safeDir)
 	if err := os.MkdirAll(chunkDir, 0700); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
