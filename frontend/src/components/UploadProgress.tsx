@@ -7,7 +7,11 @@ import {
   Loader2, 
   FileUp,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Pause,
+  Play,
+  RotateCcw,
+  Square
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
@@ -16,7 +20,7 @@ export interface UploadStatus {
   id: string;
   name: string;
   progress: number;
-  status: 'uploading' | 'completed' | 'error';
+  status: 'uploading' | 'paused' | 'completed' | 'error';
   error?: string;
   speed?: string;
   eta?: string;
@@ -26,12 +30,25 @@ interface UploadProgressProps {
   uploads: UploadStatus[];
   onClear: (id: string) => void;
   onClearAll: () => void;
+  onCancel?: (id: string) => void;
+  onPause?: (id: string) => void;
+  onResume?: (id: string) => void;
+  onRetry?: (id: string) => void;
 }
 
-export const UploadProgress: React.FC<UploadProgressProps> = ({ uploads, onClear, onClearAll }) => {
+export const UploadProgress: React.FC<UploadProgressProps> = ({ 
+  uploads, 
+  onClear, 
+  onClearAll,
+  onCancel,
+  onPause,
+  onResume,
+  onRetry,
+}) => {
   const [isExpanded, setIsExpanded] = React.useState(true);
   
   const activeCount = uploads.filter(u => u.status === 'uploading').length;
+  const pausedCount = uploads.filter(u => u.status === 'paused').length;
   const completedCount = uploads.filter(u => u.status === 'completed').length;
   const errorCount = uploads.filter(u => u.status === 'error').length;
 
@@ -56,10 +73,10 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ uploads, onClear
             </div>
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider">
-                {activeCount > 0 ? `Uploading ${activeCount} files...` : 'Uploads finished'}
+                {activeCount > 0 ? `Uploading ${activeCount} file${activeCount > 1 ? 's' : ''}...` : 'Uploads finished'}
               </h3>
               <p className="text-[10px] text-muted-foreground font-medium">
-                {completedCount} completed • {errorCount} errors
+                {completedCount} completed • {pausedCount > 0 ? `${pausedCount} paused • ` : ''}{errorCount} errors
               </p>
             </div>
           </div>
@@ -101,6 +118,9 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ uploads, onClear
                         {upload.status === 'uploading' && (
                           <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
                         )}
+                        {upload.status === 'paused' && (
+                          <Pause className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        )}
                         {upload.status === 'completed' && (
                           <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
                         )}
@@ -123,6 +143,7 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ uploads, onClear
                         className={cn(
                           "h-full rounded-full transition-all",
                           upload.status === 'uploading' && "bg-primary",
+                          upload.status === 'paused' && "bg-amber-500",
                           upload.status === 'completed' && "bg-success",
                           upload.status === 'error' && "bg-destructive"
                         )}
@@ -137,6 +158,11 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ uploads, onClear
                           {upload.eta && <span>{upload.eta} remaining</span>}
                         </div>
                       )}
+                      {upload.status === 'paused' && (
+                        <span className="text-[10px] text-amber-500 font-medium uppercase tracking-tighter">
+                          Paused
+                        </span>
+                      )}
                       {upload.error && (
                         <p className="text-[10px] text-destructive font-medium leading-tight">
                           {upload.error}
@@ -144,12 +170,75 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({ uploads, onClear
                       )}
                     </div>
 
-                    <button 
-                      onClick={() => onClear(upload.id)}
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-background rounded-md"
-                    >
-                      <X className="w-3 h-3 text-muted-foreground" />
-                    </button>
+                    {/* Action buttons */}
+                    <div className="flex gap-1 pt-1 border-t border-border/20">
+                      {(upload.status === 'uploading') && onPause && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1 px-2"
+                          onClick={(e) => { e.stopPropagation(); onPause(upload.id); }}
+                        >
+                          <Pause className="w-3 h-3" />
+                          Pause
+                        </Button>
+                      )}
+                      {(upload.status === 'uploading') && onCancel && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1 px-2 text-destructive hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); onCancel(upload.id); }}
+                        >
+                          <Square className="w-3 h-3" />
+                          Cancel
+                        </Button>
+                      )}
+                      {(upload.status === 'paused') && onResume && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1 px-2"
+                          onClick={(e) => { e.stopPropagation(); onResume(upload.id); }}
+                        >
+                          <Play className="w-3 h-3" />
+                          Resume
+                        </Button>
+                      )}
+                      {(upload.status === 'paused') && onCancel && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1 px-2 text-destructive hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); onCancel(upload.id); }}
+                        >
+                          <X className="w-3 h-3" />
+                          Remove
+                        </Button>
+                      )}
+                      {(upload.status === 'error') && onRetry && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1 px-2"
+                          onClick={(e) => { e.stopPropagation(); onRetry(upload.id); }}
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          Retry
+                        </Button>
+                      )}
+                      {(upload.status === 'error') && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1 px-2"
+                          onClick={(e) => { e.stopPropagation(); onClear(upload.id); }}
+                        >
+                          <X className="w-3 h-3" />
+                          Dismiss
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
