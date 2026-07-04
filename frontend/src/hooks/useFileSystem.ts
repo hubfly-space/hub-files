@@ -2,8 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
 import type { FileInfo, SessionInfo, StorageInfo } from "../api";
 
+function pathFromURL(): string {
+  const p = window.location.pathname;
+  return p === "/" ? "/" : p.replace(/\/$/, "");
+}
+
 export function useFileSystem() {
-  const [path, setPath] = useState("/");
+  const [path, setPath] = useState(pathFromURL);
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +41,16 @@ export function useFileSystem() {
     loadFiles();
   }, [loadFiles]);
 
+  useEffect(() => {
+    const handlePopState = () => {
+      setPath(pathFromURL());
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const navigate = (newPath: string) => {
+    window.history.pushState(null, "", newPath === "/" ? "/" : newPath);
     setPath(newPath);
   };
 
@@ -44,7 +58,7 @@ export function useFileSystem() {
     if (path === "/") return;
     const parts = path.split("/").filter(Boolean);
     parts.pop();
-    setPath("/" + parts.join("/"));
+    navigate("/" + parts.join("/"));
   };
 
   const refresh = () => loadFiles();
