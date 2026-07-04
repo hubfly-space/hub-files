@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "./index.css";
 
 import { useFileSystem } from "./hooks/useFileSystem";
@@ -18,8 +18,49 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 import { api } from "./api";
-import { joinPath } from "./utils/path";
+import { SearchModal } from "./components/SearchModal";
+import { joinPath, dirname } from "./utils/path";
 import { NewFileDialog } from "./components/dialogs/NewFileDialog";
+
+async function getFilesFromDrag(
+  dataTransfer: DataTransfer,
+): Promise<{ file: File; relativePath: string }[]> {
+  const results: { file: File; relativePath: string }[] = [];
+
+  const entries = Array.from(dataTransfer.items)
+    .map((item) => item.webkitGetAsEntry())
+    .filter((e): e is FileSystemEntry => e !== null);
+
+  async function walkEntry(
+    entry: FileSystemEntry,
+    parentPath: string,
+  ): Promise<void> {
+    const currentPath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
+
+    if (entry.isFile) {
+      const file = await new Promise<File>((resolve, reject) => {
+        (entry as FileSystemFileEntry).file(resolve, reject);
+      });
+      results.push({ file, relativePath: currentPath });
+    } else if (entry.isDirectory) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader();
+      const children = await new Promise<FileSystemEntry[]>(
+        (resolve, reject) => {
+          reader.readEntries(resolve, reject);
+        },
+      );
+      for (const child of children) {
+        await walkEntry(child, currentPath);
+      }
+    }
+  }
+
+  for (const entry of entries) {
+    await walkEntry(entry, "");
+  }
+
+  return results;
+}
 
 function App() {
   const {
@@ -48,7 +89,25 @@ function App() {
     name: string;
   } | null>(null);
 
-  const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => setOpenFile(null);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const [isDragging, setIsDragging] = useState(false);
   const [hostMounting, setHostMounting] = useState(false);
 
@@ -89,19 +148,70 @@ function App() {
     uploadFiles,
     clearUpload,
     clearAllUploads,
+    cancelUpload,
+    pauseUpload,
+    resumeUpload,
+    retryUpload,
   } = useUploads(path, refresh);
-
-  const filteredFiles = files.filter((file) =>
-    file.name.toLowerCase().includes(search.toLowerCase()),
-  );
 
   const handleDrop = async (event: React.DragEvent) => {
     event.preventDefault();
     setIsDragging(false);
 
-    const droppedFiles = Array.from(event.dataTransfer.files);
-    if (droppedFiles.length > 0) {
-      await uploadFiles(droppedFiles);
+    const hasFolders = Array.from(event.dataTransfer.items).some(
+      (item) => item.webkitGetAsEntry()?.isDirectory,
+    );
+
+    if (hasFolders) {
+      const entries = await getFilesFromDrag(event.dataTransfer);
+      if (entries.length === 0) return;
+
+      // Create necessary directories and upload files
+      const dirsToCreate = new Set<string>();
+
+      for (const { relativePath } of entries) {
+        const dir = dirname(relativePath);
+        if (dir && dir !== ".") {
+          dirsToCreate.add(joinPath(path, dir));
+        }
+      }
+
+      // Create directories from root-most to leaf-most
+      const sortedDirs = Array.from(dirsToCreate).sort();
+      for (const dirPath of sortedDirs) {
+        try {
+          await api.mkdir(dirPath);
+        } catch {
+          // Directory may already exist
+        }
+      }
+
+      // Upload files preserving relative path
+      const filesWithNames = entries.map(({ file, relativePath }) => {
+        const dir = dirname(relativePath);
+        const baseName = relativePath.split("/").pop() || file.name;
+        // Create a new File with adjusted name for the upload path
+        const targetDir = dir && dir !== "." ? joinPath(path, dir) : path;
+        return { file, targetDir, baseName };
+      });
+
+      // Group by targetDir and upload each group
+      const groups = new Map<string, File[]>();
+      for (const { file, targetDir, baseName } of filesWithNames) {
+        const renamedFile = new File([file], baseName, { type: file.type });
+        const group = groups.get(targetDir) || [];
+        group.push(renamedFile);
+        groups.set(targetDir, group);
+      }
+
+      for (const [, groupFiles] of groups) {
+        await uploadFiles(groupFiles);
+      }
+    } else {
+      const droppedFiles = Array.from(event.dataTransfer.files);
+      if (droppedFiles.length > 0) {
+        await uploadFiles(droppedFiles);
+      }
     }
   };
 
@@ -238,6 +348,19 @@ function App() {
     }
   };
 
+  const handleSearchNavigate = (resultPath: string) => {
+    navigate(resultPath);
+  };
+
+  const handleSearchOpenFile = (resultPath: string, name: string) => {
+    const parts = resultPath.split("/");
+    const parentPath = parts.length > 1
+      ? "/" + parts.slice(0, -1).join("/")
+      : "/";
+    navigate(parentPath);
+    setOpenFile({ path: resultPath, name });
+  };
+
   return (
     <div className="fixed inset-0 bg-background flex flex-col selection:bg-primary/10">
       <div className="w-full h-full flex flex-col overflow-hidden">
@@ -254,8 +377,7 @@ function App() {
             onUpload={handleUploadClick}
             onNewFolder={() => setNewFolderDialog({ open: true, name: "" })}
             onNewFile={() => setNewFileDialog({ open: true, name: "" })}
-            search={search}
-            onSearchChange={setSearch}
+            onOpenSearch={() => setSearchOpen(true)}
             selectionMode={selectionMode}
             onSelectionModeToggle={toggleSelectionMode}
             selectedCount={selectedItems.size}
@@ -293,10 +415,10 @@ function App() {
 
           <FileBrowserContent
             openFile={openFile}
-            files={filteredFiles}
+            files={files}
             loading={loading}
             error={error}
-            search={search}
+            search=""
             viewMode={viewMode}
             selectedItems={selectedItems}
             selectionMode={selectionMode}
@@ -413,6 +535,17 @@ function App() {
         uploads={activeUploads}
         onClear={clearUpload}
         onClearAll={clearAllUploads}
+        onCancel={cancelUpload}
+        onPause={pauseUpload}
+        onResume={resumeUpload}
+        onRetry={retryUpload}
+      />
+
+      <SearchModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onNavigate={handleSearchNavigate}
+        onOpenFile={handleSearchOpenFile}
       />
     </div>
   );

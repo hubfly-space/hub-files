@@ -1,6 +1,40 @@
 // Use relative URL for API calls - works with same-origin or reverse proxy
 const API_BASE = "http://localhost:10015/api";
 
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
+
+const SESSION_COOKIE = "session";
+
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(
+    new RegExp(`(?:^|;\\s*)${name}=([^;]*)`),
+  );
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function setCookie(
+  name: string,
+  value: string,
+  maxAgeSeconds: number,
+): void {
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
+}
+
+function initSession(): void {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("session");
+  if (!token) return;
+
+  setCookie(SESSION_COOKIE, token, 86400);
+  params.delete("session");
+  const newURL = params.toString()
+    ? `${window.location.pathname}?${params}`
+    : window.location.pathname;
+  window.history.replaceState(null, "", newURL);
+}
+
+initSession();
+
 export interface FileInfo {
   name: string;
   isDir: boolean;
@@ -47,8 +81,7 @@ export interface HostUnmountResult {
 
 export const api = {
   getToken: () => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("session") || "demo";
+    return getCookie(SESSION_COOKIE) || "demo";
   },
 
   headers: () => ({
@@ -139,41 +172,95 @@ export const api = {
     path: string,
     file: File,
     onProgress?: (loaded: number, total: number) => void,
+    signal?: AbortSignal,
+    uploadId?: string,
+    startOffset?: number,
   ): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      const params = new URLSearchParams({
-        path,
-        filename: file.name,
-      });
+    const totalSize = file.size;
+    const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
+    const id =
+      uploadId ||
+      globalThis.crypto?.randomUUID?.() ||
+      `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    let uploadedBytes = startOffset ?? 0;
+    const startChunk = startOffset
+      ? Math.floor(startOffset / CHUNK_SIZE)
+      : 0;
 
-      xhr.open("POST", `${API_BASE}/upload?${params.toString()}`);
-      xhr.setRequestHeader("Authorization", `Bearer ${api.getToken()}`);
-      xhr.setRequestHeader(
-        "Content-Type",
-        file.type || "application/octet-stream",
-      );
+    const uploadChunk = (chunkIndex: number): Promise<void> =>
+      new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(new DOMException("Upload cancelled", "AbortError"));
+          return;
+        }
 
-      if (onProgress && xhr.upload) {
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            onProgress(e.loaded, e.total);
+        const start = chunkIndex * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, totalSize) - 1;
+        const chunk = file.slice(start, end + 1);
+        const params = new URLSearchParams({
+          path,
+          filename: file.name,
+          uploadId: id,
+        });
+
+        const xhr = new XMLHttpRequest();
+
+        const onAbort = () => {
+          xhr.abort();
+          reject(new DOMException("Upload cancelled", "AbortError"));
+        };
+        signal?.addEventListener("abort", onAbort, { once: true });
+
+        if (onProgress && xhr.upload) {
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              onProgress(uploadedBytes + e.loaded, totalSize);
+            }
+          };
+        }
+
+        xhr.open("POST", `${API_BASE}/upload?${params.toString()}`);
+        xhr.setRequestHeader("Authorization", `Bearer ${api.getToken()}`);
+        xhr.setRequestHeader(
+          "Content-Type",
+          file.type || "application/octet-stream",
+        );
+        xhr.setRequestHeader(
+          "Content-Range",
+          `bytes ${start}-${end}/${totalSize}`,
+        );
+
+        xhr.onload = () => {
+          signal?.removeEventListener("abort", onAbort);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            uploadedBytes += chunk.size;
+            resolve();
+          } else {
+            reject(new Error(xhr.responseText || "Chunk upload failed"));
           }
         };
+
+        xhr.onerror = () => {
+          signal?.removeEventListener("abort", onAbort);
+          reject(new Error("Network error"));
+        };
+        xhr.onabort = () => {
+          signal?.removeEventListener("abort", onAbort);
+          reject(new DOMException("Upload cancelled", "AbortError"));
+        };
+
+        xhr.send(chunk);
+      });
+
+    const uploadAllChunks = async () => {
+      for (let i = startChunk; i < totalChunks; i++) {
+        if (signal?.aborted)
+          throw new DOMException("Upload cancelled", "AbortError");
+        await uploadChunk(i);
       }
+    };
 
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve();
-        } else {
-          reject(new Error(xhr.responseText || "Upload failed"));
-        }
-      };
-
-      xhr.onerror = () => reject(new Error("Network error"));
-      xhr.onabort = () => reject(new Error("Upload cancelled"));
-      xhr.send(file);
-    });
+    return uploadAllChunks();
   },
 
   mkdir: async (path: string): Promise<void> => {

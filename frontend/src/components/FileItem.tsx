@@ -51,7 +51,6 @@ export const FileItem: React.FC<FileItemProps> = ({
   onMove,
 }) => {
   const clickTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isDoubleClick = useRef(false);
   const [isDragOver, setIsDragOver] = React.useState(false);
 
   const formatSize = (bytes: number) => {
@@ -64,30 +63,26 @@ export const FileItem: React.FC<FileItemProps> = ({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isDoubleClick.current) {
-      isDoubleClick.current = false;
-      return;
-    }
 
     if (clickTimeout.current) {
       clearTimeout(clickTimeout.current);
       clickTimeout.current = null;
+      return;
     }
 
     clickTimeout.current = setTimeout(() => {
       clickTimeout.current = null;
-      onSelect(file.name, e.ctrlKey || e.metaKey || selectionMode);
+      onNavigate(file.name);
     }, 200);
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    isDoubleClick.current = true;
     if (clickTimeout.current) {
       clearTimeout(clickTimeout.current);
       clickTimeout.current = null;
     }
-    onNavigate(file.name);
+    onSelect(file.name, e.ctrlKey || e.metaKey || selectionMode);
   };
 
   const handleDragStart = (e: React.DragEvent) => {
