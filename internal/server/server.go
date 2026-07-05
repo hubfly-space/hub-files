@@ -25,6 +25,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -61,7 +62,39 @@ func NewServer(cfg *config.Config, store *sessions.Store, db *sqlite.Storage) *S
 		srv.Indexer = indexer.NewManager(db)
 	}
 
+	srv.startUploadCleaner()
+
 	return srv
+}
+
+const uploadsTempPrefix = "hubfiles-uploads"
+
+// startUploadCleaner periodically removes stale partial upload directories
+// older than 24 hours.
+func (s *Server) startUploadCleaner() {
+	go func() {
+		for {
+			time.Sleep(1 * time.Hour)
+			dir := filepath.Join(os.TempDir(), uploadsTempPrefix)
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				continue
+			}
+			cutoff := time.Now().Add(-24 * time.Hour)
+			for _, e := range entries {
+				if !e.IsDir() {
+					continue
+				}
+				info, err := e.Info()
+				if err != nil {
+					continue
+				}
+				if info.ModTime().Before(cutoff) {
+					os.RemoveAll(filepath.Join(dir, e.Name()))
+				}
+			}
+		}
+	}()
 }
 
 func (s *Server) Close() error {
@@ -155,6 +188,25 @@ func validUploadFilename(name string) bool {
 		!filepath.IsAbs(name) &&
 		!strings.ContainsAny(name, `/\`) &&
 		!strings.ContainsRune(name, 0)
+}
+
+// validUploadID ensures upload IDs can't be used for path traversal.
+// Only alphanumeric, hyphens, underscores, and dots are allowed.
+func validUploadID(id string) bool {
+	if id == "" || id == "." || id == ".." {
+		return false
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-' || r == '_' || r == '.':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 type sessionContextKey struct{}
@@ -370,6 +422,13 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			token = strings.TrimPrefix(token, "Bearer ")
 		}
 
+		// Fall back to cookie for direct loads (images, downloads, page refresh)
+		if token == "" {
+			if c, err := r.Cookie("session"); err == nil && c.Value != "" {
+				token = c.Value
+			}
+		}
+
 		// Also check query parameter for compatibility (but log warning)
 		if token == "" {
 			token = r.URL.Query().Get("session")
@@ -447,8 +506,35 @@ func (s *Server) checkPermission(w http.ResponseWriter, r *http.Request, permFla
 	return true
 }
 
+func sanitizePath(p string) (string, error) {
+	p = strings.ReplaceAll(p, "\\", "/")
+	if strings.ContainsRune(p, 0) {
+		return "", filesystem.ErrUnauthorized
+	}
+	for _, part := range strings.Split(p, "/") {
+		if part == ".." {
+			return "", filesystem.ErrUnauthorized
+		}
+	}
+	p = strings.TrimLeft(p, "/")
+	return p, nil
+}
+
 func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Query().Get("path")
+	path, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
+
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 0 {
+		limit = 0
+	}
 
 	files, err := s.backendForRequest(r).List(r.Context(), path)
 	if err != nil {
@@ -457,8 +543,35 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slices.SortFunc(files, func(a, b filesystem.FileInfo) int {
+		if a.IsDir != b.IsDir {
+			if a.IsDir {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
+
+	total := len(files)
+
+	if limit > 0 {
+		if offset >= total {
+			files = nil
+		} else {
+			end := offset + limit
+			if end > total {
+				end = total
+			}
+			files = files[offset:end]
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(files)
+	json.NewEncoder(w).Encode(map[string]any{
+		"items": files,
+		"total": total,
+	})
 }
 
 func (s *Server) handleSessionInfo(w http.ResponseWriter, r *http.Request) {
@@ -596,7 +709,11 @@ func (s *Server) handleHostUnmount(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	root := r.Header.Get("X-Session-Root")
-	path := r.URL.Query().Get("path")
+	path, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 
 	if r.Header.Get("X-Session-Demo") == "true" {
 		w.Header().Set("Content-Type", "application/json")
@@ -642,7 +759,11 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Query().Get("path")
+	path, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 
 	reader, err := s.backendForRequest(r).Read(r.Context(), path)
 	if err != nil {
@@ -664,9 +785,13 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 	if !s.checkPermission(w, r, "AllowEdit") {
 		return
 	}
-	path := r.URL.Query().Get("path")
+	path, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 
-	err := s.backendForRequest(r).Write(r.Context(), path, r.Body)
+	err = s.backendForRequest(r).Write(r.Context(), path, r.Body)
 	if err != nil {
 		log.Printf("PutFile error: %v", err)
 		writeFileSystemError(w, err)
@@ -681,6 +806,30 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	backend := s.backendForRequest(r)
+
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		s.handleMultipartUpload(w, r, backend)
+		return
+	}
+
+	dirPath, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
+	filename := r.URL.Query().Get("filename")
+	if !validUploadFilename(filename) {
+		http.Error(w, "Invalid file name", http.StatusBadRequest)
+		return
+	}
+
+	// Chunked upload via Content-Range
+	if cr := r.Header.Get("Content-Range"); cr != "" {
+		s.handleChunkedUpload(w, r, backend, dirPath, filename)
+		return
+	}
+
+	// Non-chunked upload – enforce size limit
 	maxUploadBytes := s.Config.MaxUploadBytes
 	if maxUploadBytes > 0 {
 		if r.ContentLength > maxUploadBytes {
@@ -688,18 +837,6 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
-	}
-
-	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-		s.handleMultipartUpload(w, r, backend)
-		return
-	}
-
-	dirPath := r.URL.Query().Get("path")
-	filename := r.URL.Query().Get("filename")
-	if !validUploadFilename(filename) {
-		http.Error(w, "Invalid file name", http.StatusBadRequest)
-		return
 	}
 
 	finalPath := path.Join(dirPath, filename)
@@ -712,6 +849,115 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// Content-Range: bytes <start>-<end>/<total>
+// e.g. "bytes 0-5242879/20971520"
+func parseContentRange(header string) (start, end, total int64, err error) {
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) != 2 || parts[0] != "bytes" {
+		return 0, 0, 0, fmt.Errorf("invalid Content-Range: %s", header)
+	}
+	rangeParts := strings.SplitN(parts[1], "/", 2)
+	if len(rangeParts) != 2 {
+		return 0, 0, 0, fmt.Errorf("invalid Content-Range: %s", header)
+	}
+	se := strings.SplitN(rangeParts[0], "-", 2)
+	if len(se) != 2 {
+		return 0, 0, 0, fmt.Errorf("invalid Content-Range: %s", header)
+	}
+	start, err = strconv.ParseInt(se[0], 10, 64)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("invalid Content-Range: %w", err)
+	}
+	end, err = strconv.ParseInt(se[1], 10, 64)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("invalid Content-Range: %w", err)
+	}
+	total, err = strconv.ParseInt(rangeParts[1], 10, 64)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("invalid Content-Range: %w", err)
+	}
+	return
+}
+
+func (s *Server) handleChunkedUpload(w http.ResponseWriter, r *http.Request, b filebackend.Backend, dirPath, filename string) {
+	cr := r.Header.Get("Content-Range")
+	start, end, total, err := parseContentRange(cr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if end < start || total < end+1 {
+		http.Error(w, "Invalid byte range", http.StatusBadRequest)
+		return
+	}
+
+	var safeDir string
+	if id := r.URL.Query().Get("uploadId"); id != "" && validUploadID(id) {
+		safeDir = id
+	} else {
+		safeDir = fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+
+	chunkDir := filepath.Join(os.TempDir(), uploadsTempPrefix, safeDir)
+	if err := os.MkdirAll(chunkDir, 0700); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	dataPath := filepath.Join(chunkDir, "data")
+
+	// Open or create the partial file and seek to the chunk offset
+	f, err := os.OpenFile(dataPath, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		f.Close()
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := io.Copy(f, r.Body); err != nil {
+		f.Close()
+		http.Error(w, "Write error", http.StatusInternalServerError)
+		return
+	}
+	f.Close()
+
+	isLast := end == total-1
+	if !isLast {
+		fi, _ := os.Stat(dataPath)
+		received := int64(0)
+		if fi != nil {
+			received = fi.Size()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]int64{"receivedBytes": received})
+		return
+	}
+
+	// Last chunk – finalise
+	reader, err := os.Open(dataPath)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	defer reader.Close()
+
+	finalPath := path.Join(dirPath, filename)
+	if err := b.WriteAtomic(r.Context(), finalPath, reader); err != nil {
+		log.Printf("Upload error: %v", err)
+		writeUploadError(w, err)
+		return
+	}
+
+	// Cleanup temp dir
+	os.RemoveAll(chunkDir)
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (s *Server) handleMultipartUpload(w http.ResponseWriter, r *http.Request, backend filebackend.Backend) {
 	reader, err := r.MultipartReader()
 	if err != nil {
@@ -719,7 +965,11 @@ func (s *Server) handleMultipartUpload(w http.ResponseWriter, r *http.Request, b
 		return
 	}
 
-	dirPath := r.URL.Query().Get("path")
+	dirPath, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
@@ -777,7 +1027,13 @@ func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.backendForRequest(r).Mkdir(r.Context(), req.Path)
+	cleanPath, err := sanitizePath(req.Path)
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
+
+	err = s.backendForRequest(r).Mkdir(r.Context(), cleanPath)
 	if err != nil {
 		log.Printf("Mkdir error: %v", err)
 		writeFileSystemError(w, err)
@@ -799,7 +1055,13 @@ func (s *Server) handleTouch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.backendForRequest(r).Touch(r.Context(), req.Path)
+	cleanPath, err := sanitizePath(req.Path)
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
+
+	err = s.backendForRequest(r).Touch(r.Context(), cleanPath)
 	if err != nil {
 		log.Printf("Touch error: %v", err)
 		writeFileSystemError(w, err)
@@ -822,7 +1084,18 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.backendForRequest(r).Rename(r.Context(), req.OldPath, req.NewPath)
+	oldPath, err := sanitizePath(req.OldPath)
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
+	newPath, err := sanitizePath(req.NewPath)
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
+
+	err = s.backendForRequest(r).Rename(r.Context(), oldPath, newPath)
 	if err != nil {
 		log.Printf("Rename error: %v", err)
 		writeFileSystemError(w, err)
@@ -835,9 +1108,13 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.checkPermission(w, r, "AllowDelete") {
 		return
 	}
-	path := r.URL.Query().Get("path")
+	path, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 
-	err := s.backendForRequest(r).Delete(r.Context(), path)
+	err = s.backendForRequest(r).Delete(r.Context(), path)
 	if err != nil {
 		log.Printf("Delete error: %v", err)
 		writeFileSystemError(w, err)

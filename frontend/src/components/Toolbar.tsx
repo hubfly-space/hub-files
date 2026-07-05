@@ -15,8 +15,6 @@ import {
   HardDriveUpload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useEffect, useRef, useState } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -26,18 +24,6 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-// Debounce utility
-// function useDebounce<T extends (...args: any[]) => any>(
-//   callback: T,
-//   delay: number,
-// ): T {
-//   let timeoutId: ReturnType<typeof setTimeout>;
-//   return ((...args: any[]) => {
-//     clearTimeout(timeoutId);
-//     timeoutId = setTimeout(() => callback(...args), delay);
-//   }) as T;
-// }
-
 interface ToolbarProps {
   viewMode: "list" | "grid";
   onViewToggle: () => void;
@@ -45,8 +31,7 @@ interface ToolbarProps {
   onUpload: () => void;
   onNewFolder: () => void;
   onNewFile: () => void;
-  search: string;
-  onSearchChange: (value: string) => void;
+  onOpenSearch: () => void;
   selectionMode: boolean;
   onSelectionModeToggle: () => void;
   selectedCount: number;
@@ -67,8 +52,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onUpload,
   onNewFolder,
   onNewFile,
-  search,
-  onSearchChange,
+  onOpenSearch,
   selectionMode,
   onSelectionModeToggle,
   selectedCount,
@@ -80,53 +64,26 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onHostMount,
   onHostUnmount,
 }) => {
-  const [localSearch, setLocalSearch] = useState(search);
-
-  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onSearchChangeRef = useRef(onSearchChange);
-
-  useEffect(() => {
-    onSearchChangeRef.current = onSearchChange;
-  }, [onSearchChange]);
-
-  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value;
-
-    setLocalSearch(value);
-
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    searchTimeoutRef.current = setTimeout(() => {
-      onSearchChangeRef.current(value);
-    }, 300);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, []);
-  // Debounced search handler
-  // const debouncedSearch = useCallback(
-  //   useDebounce((value: string) => onSearchChange(value), 300),
-  //   [onSearchChange]
-  // );
-
   return (
     <TooltipProvider>
       <div className="flex items-center gap-4 py-1">
-        <div className="relative flex-1 max-w-md group">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-          <Input
-            value={localSearch}
-            onChange={handleSearchChange}
-            placeholder="Search files..."
-            className="pl-10 h-10 bg-secondary/30 border-transparent focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary/30 rounded-xl transition-all"
-          />
+        <div className="flex-1 max-w-md">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="secondary"
+                onClick={onOpenSearch}
+                className="w-full h-10 justify-start gap-3 bg-secondary/30 border border-transparent hover:bg-secondary/50 hover:border-border/40 rounded-xl text-muted-foreground font-normal transition-all"
+              >
+                <Search className="w-4 h-4 shrink-0" />
+                <span>Search files...</span>
+                <span className="ml-auto text-xs text-muted-foreground/40 bg-secondary/50 px-1.5 py-0.5 rounded-md border border-border/20">
+                  Ctrl+K
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Search across all files</TooltipContent>
+          </Tooltip>
         </div>
 
         <div className="flex items-center gap-1.5 ml-auto">

@@ -23,6 +23,29 @@ const watchMask = unix.IN_CREATE |
 	unix.IN_DELETE_SELF |
 	unix.IN_MOVE_SELF
 
+// excludedDirs lists directory names that should not be indexed or watched.
+// These are typically large dependency/build/cache directories that add noise to search results.
+var excludedDirs = map[string]bool{
+	"node_modules":    true,
+	".git":            true,
+	".svn":            true,
+	".hg":             true,
+	".next":           true,
+	".nuxt":           true,
+	".cache":          true,
+	".turbo":          true,
+	"bower_components": true,
+	"target":          true,
+	"vendor":          true,
+	"__pycache__":     true,
+	".venv":           true,
+	".idea":           true,
+}
+
+func isExcludedDir(name string) bool {
+	return excludedDirs[name]
+}
+
 type Manager struct {
 	store *sqlite.Storage
 
@@ -154,6 +177,14 @@ func (r *RootIndexer) indexTree(start string) error {
 		}
 
 		if info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+			if isExcludedDir(entry.Name()) {
+				if relPath, ok := r.relPath(path); ok {
+					if err := r.store.DeletePathPrefix(r.root, relPath); err != nil {
+						log.Printf("index cleanup error for %s: %v", path, err)
+					}
+				}
+				return filepath.SkipDir
+			}
 			if err := r.addWatch(path); err != nil {
 				log.Printf("watch error for %s: %v", path, err)
 			}
@@ -352,6 +383,9 @@ func (r *RootIndexer) handleEvent(wd int, mask uint32, name string) {
 			return
 		}
 		if info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+			if isExcludedDir(info.Name()) {
+				return
+			}
 			if err := r.indexTree(path); err != nil {
 				log.Printf("index tree error for %s: %v", path, err)
 			}

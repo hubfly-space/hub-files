@@ -1,7 +1,7 @@
 import React from "react";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertCircle, Loader2, Search } from "lucide-react";
+import { AlertCircle, ChevronDown, Loader2, Search } from "lucide-react";
 
 import { FileItem } from "../FileItem";
 import { FileViewer } from "../FileViewer";
@@ -26,6 +26,8 @@ type FileBrowserContentProps = {
   viewMode: ViewMode;
   selectedItems: Set<string>;
   selectionMode: boolean;
+  total: number;
+  hasMore: boolean;
   onCloseFile: () => void;
   onRefresh: () => void;
   onNavigate: (name: string) => void;
@@ -35,6 +37,7 @@ type FileBrowserContentProps = {
   onZip: (name: string) => void;
   onExtract: (name: string) => void;
   onMove: (sourceName: string, targetFolderName: string) => void;
+  onLoadMore: () => void;
 };
 
 export function FileBrowserContent({
@@ -46,6 +49,8 @@ export function FileBrowserContent({
   viewMode,
   selectedItems,
   selectionMode,
+  total,
+  hasMore,
   onCloseFile,
   onRefresh,
   onNavigate,
@@ -55,6 +60,7 @@ export function FileBrowserContent({
   onZip,
   onExtract,
   onMove,
+  onLoadMore,
 }: FileBrowserContentProps) {
   if (openFile) {
     return (
@@ -76,38 +82,55 @@ export function FileBrowserContent({
     <div className="h-full overflow-y-auto no-scrollbar scroll-smooth">
       <div className="p-6 max-w-[1600px] mx-auto w-full min-h-full flex flex-col">
         <AnimatePresence mode="wait">
-          {loading ? (
+          {loading && files.length === 0 ? (
             <LoadingState />
           ) : error ? (
             <ErrorState error={error} onRefresh={onRefresh} />
           ) : files.length === 0 ? (
             <EmptyState search={search} />
           ) : (
-            <motion.div
-              key="content"
-              layout
-              className={cn(
-                "flex-1",
-                viewMode === "list" ? "space-y-1.5" : "file-grid-layout",
+            <>
+              <motion.div
+                key="content"
+                layout
+                className={cn(
+                  "flex-1",
+                  viewMode === "list" ? "space-y-1.5" : "file-grid-layout",
+                )}
+              >
+                {files.map((file) => (
+                  <FileItem
+                    key={file.name}
+                    file={file}
+                    viewMode={viewMode}
+                    isSelected={selectedItems.has(file.name)}
+                    selectionMode={selectionMode}
+                    onNavigate={onNavigate}
+                    onSelect={onSelect}
+                    onDelete={onDelete}
+                    onRename={onRename}
+                    onZip={onZip}
+                    onExtract={onExtract}
+                    onMove={onMove}
+                  />
+                ))}
+              </motion.div>
+
+              {hasMore && (
+                <div className="flex justify-center py-6">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl gap-2"
+                    onClick={onLoadMore}
+                    disabled={loading}
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                    Show {total - files.length} more
+                  </Button>
+                </div>
               )}
-            >
-              {files.map((file) => (
-                <FileItem
-                  key={file.name}
-                  file={file}
-                  viewMode={viewMode}
-                  isSelected={selectedItems.has(file.name)}
-                  selectionMode={selectionMode}
-                  onNavigate={onNavigate}
-                  onSelect={onSelect}
-                  onDelete={onDelete}
-                  onRename={onRename}
-                  onZip={onZip}
-                  onExtract={onExtract}
-                  onMove={onMove}
-                />
-              ))}
-            </motion.div>
+            </>
           )}
         </AnimatePresence>
       </div>

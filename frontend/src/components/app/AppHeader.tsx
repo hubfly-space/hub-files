@@ -16,7 +16,6 @@ type AppHeaderProps = {
   path: string;
   storage?: StorageInfo | null;
   viewMode: "list" | "grid";
-  search: string;
   selectionMode: boolean;
   selectedCount: number;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -26,7 +25,7 @@ type AppHeaderProps = {
   onUpload: () => void;
   onNewFolder: () => void;
   onNewFile: () => void;
-  onSearchChange: (value: string) => void;
+  onOpenSearch: () => void;
   onSelectionModeToggle: () => void;
   onBulkDelete: () => void;
   onBulkZip: () => void;
@@ -42,7 +41,6 @@ export function AppHeader({
   path,
   storage,
   viewMode,
-  search,
   selectionMode,
   selectedCount,
   fileInputRef,
@@ -52,7 +50,7 @@ export function AppHeader({
   onUpload,
   onNewFolder,
   onNewFile,
-  onSearchChange,
+  onOpenSearch,
   onSelectionModeToggle,
   onBulkDelete,
   onBulkZip,
@@ -97,8 +95,7 @@ export function AppHeader({
           onUpload={onUpload}
           onNewFile={onNewFile}
           onNewFolder={onNewFolder}
-          search={search}
-          onSearchChange={onSearchChange}
+          onOpenSearch={onOpenSearch}
           selectionMode={selectionMode}
           onSelectionModeToggle={onSelectionModeToggle}
           selectedCount={selectedCount}

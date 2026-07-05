@@ -2,41 +2,70 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
 import type { FileInfo, SessionInfo, StorageInfo } from "../api";
 
+const PAGE_SIZE = 50;
+
+function pathFromURL(): string {
+  const p = window.location.pathname;
+  return p === "/" ? "/" : p.replace(/\/$/, "");
+}
+
 export function useFileSystem() {
-  const [path, setPath] = useState("/");
+  const [path, setPath] = useState(pathFromURL);
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [session, setSession] = useState<SessionInfo | null>(null);
+  const [total, setTotal] = useState(0);
 
-  const loadFiles = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [sessionData, data, storageData] = await Promise.all([
-        api.session(),
-        api.list(path),
-        api.storage(path),
-      ]);
-      setSession(sessionData);
-      setFiles(data);
-      setStorage(storageData);
-      setError(null);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
+  const hasMore = total > files.length;
+
+  const loadPage = useCallback(
+    async (pageOffset: number) => {
+      setLoading(true);
+      try {
+        const [sessionData, result, storageData] = await Promise.all([
+          api.session(),
+          api.list(path, { offset: pageOffset, limit: PAGE_SIZE }),
+          api.storage(path),
+        ]);
+        setSession(sessionData);
+        setFiles((prev) =>
+          pageOffset === 0
+            ? result.items
+            : [...prev, ...result.items],
+        );
+        setTotal(result.total);
+        setStorage(storageData);
+        setError(null);
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message);
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [path]);
+    },
+    [path],
+  );
 
   useEffect(() => {
-    loadFiles();
-  }, [loadFiles]);
+    setFiles([]);
+    setTotal(0);
+    loadPage(0);
+  }, [loadPage]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setPath(pathFromURL());
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const navigate = (newPath: string) => {
+    window.history.pushState(null, "", newPath === "/" ? "/" : newPath);
     setPath(newPath);
   };
 
@@ -44,10 +73,19 @@ export function useFileSystem() {
     if (path === "/") return;
     const parts = path.split("/").filter(Boolean);
     parts.pop();
-    setPath("/" + parts.join("/"));
+    navigate("/" + parts.join("/"));
   };
 
-  const refresh = () => loadFiles();
+  const refresh = () => {
+    setFiles([]);
+    setTotal(0);
+    loadPage(0);
+  };
+
+  const loadMore = () => {
+    if (!hasMore || loading) return;
+    loadPage(files.length);
+  };
 
   const deleteItem = async (itemName: string) => {
     const itemPath = path === "/" ? `/${itemName}` : `${path}/${itemName}`;
@@ -117,5 +155,8 @@ export function useFileSystem() {
     zipItem,
     createFile,
     extractItem,
+    total,
+    hasMore,
+    loadMore,
   };
 }
