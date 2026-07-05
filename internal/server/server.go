@@ -891,12 +891,12 @@ func (s *Server) handleChunkedUpload(w http.ResponseWriter, r *http.Request, b f
 		return
 	}
 
-	uploadID := r.URL.Query().Get("uploadId")
-	if uploadID == "" || !validUploadID(uploadID) {
-		uploadID = fmt.Sprintf("%d", time.Now().UnixNano())
+	var safeDir string
+	if id := r.URL.Query().Get("uploadId"); id != "" && validUploadID(id) {
+		safeDir = id
+	} else {
+		safeDir = fmt.Sprintf("%d", time.Now().UnixNano())
 	}
-
-	safeDir := filepath.Base(uploadID)
 
 	chunkDir := filepath.Join(os.TempDir(), uploadsTempPrefix, safeDir)
 	if err := os.MkdirAll(chunkDir, 0700); err != nil {
