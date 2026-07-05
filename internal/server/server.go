@@ -506,8 +506,26 @@ func (s *Server) checkPermission(w http.ResponseWriter, r *http.Request, permFla
 	return true
 }
 
+func sanitizePath(p string) (string, error) {
+	p = strings.ReplaceAll(p, "\\", "/")
+	if strings.ContainsRune(p, 0) {
+		return "", filesystem.ErrUnauthorized
+	}
+	for _, part := range strings.Split(p, "/") {
+		if part == ".." {
+			return "", filesystem.ErrUnauthorized
+		}
+	}
+	p = strings.TrimLeft(p, "/")
+	return p, nil
+}
+
 func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Query().Get("path")
+	path, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -691,7 +709,11 @@ func (s *Server) handleHostUnmount(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	root := r.Header.Get("X-Session-Root")
-	path := r.URL.Query().Get("path")
+	path, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 
 	if r.Header.Get("X-Session-Demo") == "true" {
 		w.Header().Set("Content-Type", "application/json")
@@ -737,7 +759,11 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetFile(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Query().Get("path")
+	path, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 
 	reader, err := s.backendForRequest(r).Read(r.Context(), path)
 	if err != nil {
@@ -759,9 +785,13 @@ func (s *Server) handlePutFile(w http.ResponseWriter, r *http.Request) {
 	if !s.checkPermission(w, r, "AllowEdit") {
 		return
 	}
-	path := r.URL.Query().Get("path")
+	path, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 
-	err := s.backendForRequest(r).Write(r.Context(), path, r.Body)
+	err = s.backendForRequest(r).Write(r.Context(), path, r.Body)
 	if err != nil {
 		log.Printf("PutFile error: %v", err)
 		writeFileSystemError(w, err)
@@ -782,7 +812,11 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dirPath := r.URL.Query().Get("path")
+	dirPath, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 	filename := r.URL.Query().Get("filename")
 	if !validUploadFilename(filename) {
 		http.Error(w, "Invalid file name", http.StatusBadRequest)
@@ -931,7 +965,11 @@ func (s *Server) handleMultipartUpload(w http.ResponseWriter, r *http.Request, b
 		return
 	}
 
-	dirPath := r.URL.Query().Get("path")
+	dirPath, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
@@ -989,7 +1027,13 @@ func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.backendForRequest(r).Mkdir(r.Context(), req.Path)
+	cleanPath, err := sanitizePath(req.Path)
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
+
+	err = s.backendForRequest(r).Mkdir(r.Context(), cleanPath)
 	if err != nil {
 		log.Printf("Mkdir error: %v", err)
 		writeFileSystemError(w, err)
@@ -1011,7 +1055,13 @@ func (s *Server) handleTouch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.backendForRequest(r).Touch(r.Context(), req.Path)
+	cleanPath, err := sanitizePath(req.Path)
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
+
+	err = s.backendForRequest(r).Touch(r.Context(), cleanPath)
 	if err != nil {
 		log.Printf("Touch error: %v", err)
 		writeFileSystemError(w, err)
@@ -1034,7 +1084,18 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.backendForRequest(r).Rename(r.Context(), req.OldPath, req.NewPath)
+	oldPath, err := sanitizePath(req.OldPath)
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
+	newPath, err := sanitizePath(req.NewPath)
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
+
+	err = s.backendForRequest(r).Rename(r.Context(), oldPath, newPath)
 	if err != nil {
 		log.Printf("Rename error: %v", err)
 		writeFileSystemError(w, err)
@@ -1047,9 +1108,13 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.checkPermission(w, r, "AllowDelete") {
 		return
 	}
-	path := r.URL.Query().Get("path")
+	path, err := sanitizePath(r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileSystemError(w, err)
+		return
+	}
 
-	err := s.backendForRequest(r).Delete(r.Context(), path)
+	err = s.backendForRequest(r).Delete(r.Context(), path)
 	if err != nil {
 		log.Printf("Delete error: %v", err)
 		writeFileSystemError(w, err)
