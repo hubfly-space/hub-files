@@ -557,7 +557,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 
 	if limit > 0 {
 		if offset >= total {
-			files = nil
+			files = []filesystem.FileInfo{}
 		} else {
 			end := offset + limit
 			if end > total {

@@ -1,5 +1,4 @@
-// Use relative URL for API calls - works with same-origin or reverse proxy
-const API_BASE = "http://localhost:10015/api";
+const API_BASE = "/api";
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
 
