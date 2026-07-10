@@ -33,16 +33,14 @@ export function useFileSystem() {
         setSession(sessionData);
         setFiles((prev) =>
           pageOffset === 0
-            ? result.items
-            : [...prev, ...result.items],
+            ? result.items ?? []
+            : [...prev, ...(result.items ?? [])],
         );
         setTotal(result.total);
         setStorage(storageData);
         setError(null);
       } catch (err: unknown) {
-        if (err instanceof Error) {
-          setError(err.message);
-        }
+        setError(err instanceof Error ? err.message : "Something went wrong");
       } finally {
         setLoading(false);
       }

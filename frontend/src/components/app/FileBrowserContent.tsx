@@ -1,6 +1,6 @@
 import React from "react";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { AlertCircle, ChevronDown, Loader2, Search } from "lucide-react";
 
 import { FileItem } from "../FileItem";
@@ -81,58 +81,54 @@ export function FileBrowserContent({
   return (
     <div className="h-full overflow-y-auto no-scrollbar scroll-smooth">
       <div className="p-6 max-w-[1600px] mx-auto w-full min-h-full flex flex-col">
-        <AnimatePresence mode="wait">
-          {loading && files.length === 0 ? (
-            <LoadingState />
-          ) : error ? (
-            <ErrorState error={error} onRefresh={onRefresh} />
-          ) : files.length === 0 ? (
-            <EmptyState search={search} />
-          ) : (
-            <>
-              <motion.div
-                key="content"
-                layout
-                className={cn(
-                  "flex-1",
-                  viewMode === "list" ? "space-y-1.5" : "file-grid-layout",
-                )}
-              >
-                {files.map((file) => (
-                  <FileItem
-                    key={file.name}
-                    file={file}
-                    viewMode={viewMode}
-                    isSelected={selectedItems.has(file.name)}
-                    selectionMode={selectionMode}
-                    onNavigate={onNavigate}
-                    onSelect={onSelect}
-                    onDelete={onDelete}
-                    onRename={onRename}
-                    onZip={onZip}
-                    onExtract={onExtract}
-                    onMove={onMove}
-                  />
-                ))}
-              </motion.div>
-
-              {hasMore && (
-                <div className="flex justify-center py-6">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-xl gap-2"
-                    onClick={onLoadMore}
-                    disabled={loading}
-                  >
-                    <ChevronDown className="w-4 h-4" />
-                    Show {total - files.length} more
-                  </Button>
-                </div>
+        {loading && files.length === 0 ? (
+          <LoadingState />
+        ) : error ? (
+          <ErrorState error={error} onRefresh={onRefresh} />
+        ) : files.length === 0 ? (
+          <EmptyState search={search} />
+        ) : (
+          <>
+            <div
+              className={cn(
+                "flex-1",
+                viewMode === "list" ? "space-y-1.5" : "file-grid-layout",
               )}
-            </>
-          )}
-        </AnimatePresence>
+            >
+              {files.map((file) => (
+                <FileItem
+                  key={file.name}
+                  file={file}
+                  viewMode={viewMode}
+                  isSelected={selectedItems.has(file.name)}
+                  selectionMode={selectionMode}
+                  onNavigate={onNavigate}
+                  onSelect={onSelect}
+                  onDelete={onDelete}
+                  onRename={onRename}
+                  onZip={onZip}
+                  onExtract={onExtract}
+                  onMove={onMove}
+                />
+              ))}
+            </div>
+
+            {hasMore && (
+              <div className="flex justify-center py-6">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl gap-2"
+                  onClick={onLoadMore}
+                  disabled={loading}
+                >
+                  <ChevronDown className="w-4 h-4" />
+                  Show {total - files.length} more
+                </Button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -141,7 +137,6 @@ export function FileBrowserContent({
 function LoadingState() {
   return (
     <motion.div
-      key="loading"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -168,7 +163,6 @@ function ErrorState({
 }) {
   return (
     <motion.div
-      key="error"
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0 }}
@@ -195,7 +189,6 @@ function ErrorState({
 function EmptyState({ search }: { search: string }) {
   return (
     <motion.div
-      key="empty"
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0 }}
