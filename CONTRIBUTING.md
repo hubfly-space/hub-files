@@ -45,4 +45,4 @@ git commit -s
 
 ## Security
 
-Do not open a public issue for a vulnerability. Report it privately through GitHub security reporting if it is enabled for the repository, or contact a maintainer first.
+Do not open a public issue for a vulnerability. Report it privately. contact a maintainer first.
