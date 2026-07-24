@@ -51,7 +51,7 @@ curl -s http://localhost:10014/sessions \
   }'
 ```
 
-The response includes `sessionCode`. Use it in the UI or API as a bearer token:
+The response includes `sessionCode`. Use it in the UI as query parameter {session:"your session"} or API as a bearer token:
 
 ```bash
 curl http://localhost:10015/api/list?path=/ \
