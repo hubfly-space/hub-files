@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"os"
@@ -88,6 +89,11 @@ func New(fileName string) (*Storage, error) {
 
 func (s *Storage) Close() error {
 	return s.db.Close()
+}
+
+// Ping verifies the database connection is alive.
+func (s *Storage) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
 }
 
 func createFilesTable(db *sql.DB) error {

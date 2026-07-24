@@ -74,6 +74,7 @@ func main() {
 	//initialize server
 	apiMux := srv.SetupRoutes()
 	mgmtMux := srv.SetupManagementRoutes()
+	healthMux := srv.SetupHealthRoutes()
 
 	startServer(
 		"API Server",
@@ -85,6 +86,12 @@ func main() {
 		"Management Server",
 		":"+cfg.ManagementPort,
 		corsMiddleware(mgmtMux),
+	)
+
+	startServer(
+		"Health Server",
+		":"+cfg.HealthPort,
+		healthMux,
 	)
 
 	stop := make(chan os.Signal, 1)

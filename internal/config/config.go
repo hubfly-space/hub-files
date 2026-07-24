@@ -19,6 +19,7 @@ func firstEnv(names ...string) string {
 type Config struct {
 	APIPort             string
 	ManagementPort      string
+	HealthPort          string
 	DemoDir             string
 	UIDir               string
 	MaxUploadBytes      int64
@@ -33,6 +34,7 @@ type Config struct {
 func LoadConfig() *Config {
 	apiPort := flag.String("api-port", "10015", "Port for UI/API server")
 	mgmtPort := flag.String("mgmt-port", "10014", "Port for Management server")
+	healthPort := flag.String("health-port", "60003", "Port for health check server")
 	demoDir := flag.String("demo-dir", "./demo", "Directory for demo mode")
 	uiDir := flag.String("ui-dir", "./frontend/dist", "Directory containing built UI assets")
 	maxUploadBytes := flag.Int64("max-upload-bytes", 100<<20, "Maximum upload size in bytes (0 disables the limit)")
@@ -51,6 +53,9 @@ func LoadConfig() *Config {
 	}
 	if p := firstEnv("HUBFILES_MGMT_PORT", "HUBFLY_MGMT_PORT"); p != "" {
 		*mgmtPort = p
+	}
+	if p := firstEnv("HUBFILES_HEALTH_PORT", "HUBFLY_HEALTH_PORT"); p != "" {
+		*healthPort = p
 	}
 	if d := firstEnv("HUBFILES_DEMO_DIR", "HUBFLY_DEMO_DIR"); d != "" {
 		*demoDir = d
@@ -91,6 +96,7 @@ func LoadConfig() *Config {
 	return &Config{
 		APIPort:             *apiPort,
 		ManagementPort:      *mgmtPort,
+		HealthPort:          *healthPort,
 		DemoDir:             *demoDir,
 		UIDir:               *uiDir,
 		MaxUploadBytes:      *maxUploadBytes,

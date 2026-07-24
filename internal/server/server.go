@@ -1371,3 +1371,33 @@ func (s *Server) SetupManagementRoutes() *http.ServeMux {
 	mux.HandleFunc("/sessions", methodHandlers([]string{http.MethodPost}, s.handleCreateSession))
 	return mux
 }
+
+// handleHealth reports overall service health, including the sqlite
+// database when one is configured. It intentionally never surfaces error
+// text or other internal detail to the caller - only a generic status.
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	status := "ok"
+	code := http.StatusOK
+
+	if s.Store != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := s.Store.Ping(ctx); err != nil {
+			status = "degraded"
+			code = http.StatusServiceUnavailable
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": status})
+}
+
+// SetupHealthRoutes returns a minimal, unauthenticated mux for the
+// dedicated health-check port, separate from the API/management listeners.
+func (s *Server) SetupHealthRoutes() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", methodHandlers([]string{http.MethodGet}, s.handleHealth))
+	mux.HandleFunc("/healthz", methodHandlers([]string{http.MethodGet}, s.handleHealth))
+	return mux
+}
