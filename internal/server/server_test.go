@@ -149,6 +149,108 @@ func TestCreateSessionReturnsRateLimitExceeded(t *testing.T) {
 	}
 }
 
+func TestMountedRootSessionRejectsUnmountedRoot(t *testing.T) {
+	srv, _ := newTestServer(t)
+	root := t.TempDir()
+	session, err := srv.Sessions.CreateSessionWithOptions(
+		root,
+		3600,
+		false,
+		true,
+		true,
+		true,
+		sessions.CreateOptions{RequireMountedRoot: true},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/list?path=/", nil)
+	req.Header.Set("Authorization", "Bearer "+session.Code)
+	rec := httptest.NewRecorder()
+	srv.SetupRoutes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+	if strings.Contains(rec.Body.String(), root) {
+		t.Fatalf("response leaked mounted-root path: %s", rec.Body.String())
+	}
+}
+
+func TestCreateMountedRootSessionRequiresMountedLocalRoot(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	payload, err := json.Marshal(map[string]any{
+		"root":               t.TempDir(),
+		"ttlSeconds":         3600,
+		"readonly":           false,
+		"allowUpload":        true,
+		"allowEdit":          true,
+		"allowDelete":        true,
+		"requireMountedRoot": true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/sessions", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	srv.SetupManagementRoutes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+}
+
+func TestCreateMountedRootSessionCanReadMountedRoot(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	payload, err := json.Marshal(map[string]any{
+		"root":               "/proc",
+		"ttlSeconds":         3600,
+		"readonly":           true,
+		"requireMountedRoot": true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/sessions", bytes.NewReader(payload))
+	createRec := httptest.NewRecorder()
+	srv.SetupManagementRoutes().ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusOK {
+		t.Fatalf("create status = %d, body = %s", createRec.Code, createRec.Body.String())
+	}
+
+	var session sessions.Session
+	if err := json.NewDecoder(createRec.Body).Decode(&session); err != nil {
+		t.Fatal(err)
+	}
+	if !session.RequireMountedRoot {
+		t.Fatal("created session did not retain requireMountedRoot")
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/list?path=/", nil)
+	listReq.Header.Set("Authorization", "Bearer "+session.Code)
+	listRec := httptest.NewRecorder()
+	srv.SetupRoutes().ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, body = %s", listRec.Code, listRec.Body.String())
+	}
+
+	infoReq := httptest.NewRequest(http.MethodGet, "/api/session", nil)
+	infoReq.Header.Set("Authorization", "Bearer "+session.Code)
+	infoRec := httptest.NewRecorder()
+	srv.SetupRoutes().ServeHTTP(infoRec, infoReq)
+	if infoRec.Code != http.StatusOK {
+		t.Fatalf("session info status = %d, body = %s", infoRec.Code, infoRec.Body.String())
+	}
+	if strings.Contains(infoRec.Body.String(), "/proc") {
+		t.Fatalf("session info leaked mounted-root path: %s", infoRec.Body.String())
+	}
+}
+
 func TestDemoStorageReturnsFakeValues(t *testing.T) {
 	srv, _ := newTestServer(t)
 

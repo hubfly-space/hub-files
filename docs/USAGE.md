@@ -65,6 +65,31 @@ Permissions mean:
 - `allowEdit`: allows editing file contents
 - `allowDelete`: allows delete actions
 
+### Mounted-root sessions
+
+Internal callers that browse a live container filesystem can set
+`requireMountedRoot: true` in a local session request:
+
+```json
+{
+  "root": "/var/lib/hubcell/cells/<runtime-id>/merged",
+  "ttlSeconds": 3600,
+  "readonly": false,
+  "allowUpload": true,
+  "allowEdit": true,
+  "allowDelete": true,
+  "requireMountedRoot": true
+}
+```
+
+This option accepts only local filesystem roots and requires the root to be a
+current mount point when the session is created and whenever the browser calls
+the Files API. If the container stops and the merged root is unmounted, the
+session returns a conflict instead of accessing the directory beneath it.
+The root path is kept out of browser session metadata. Existing volume, demo,
+SMB, and FTP sessions do not require this option and retain their existing
+behavior.
+
 ## SMB session
 
 Use an SMB URL as the root:

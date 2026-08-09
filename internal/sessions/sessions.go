@@ -15,16 +15,21 @@ var (
 )
 
 type Session struct {
-	Code        string     `json:"sessionCode"`
-	Root        string     `json:"root"`
-	ExpiresAt   time.Time  `json:"expiresAt"`
-	ReadOnly    bool       `json:"readonly"`
-	AllowUpload bool       `json:"allowUpload"`
-	AllowEdit   bool       `json:"allowEdit"`
-	AllowDelete bool       `json:"allowDelete"`
-	SMB         *SMBConfig `json:"-"`
-	FTP         *FTPConfig `json:"-"`
-	S3          *S3Config  `json:"-"`
+	Code               string     `json:"sessionCode"`
+	Root               string     `json:"root"`
+	ExpiresAt          time.Time  `json:"expiresAt"`
+	ReadOnly           bool       `json:"readonly"`
+	AllowUpload        bool       `json:"allowUpload"`
+	AllowEdit          bool       `json:"allowEdit"`
+	AllowDelete        bool       `json:"allowDelete"`
+	RequireMountedRoot bool       `json:"requireMountedRoot,omitempty"`
+	SMB                *SMBConfig `json:"-"`
+	FTP                *FTPConfig `json:"-"`
+	S3                 *S3Config  `json:"-"`
+}
+
+type CreateOptions struct {
+	RequireMountedRoot bool
 }
 
 type SMBConfig struct {
@@ -75,22 +80,26 @@ func NewStore() *Store {
 }
 
 func (s *Store) CreateSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool) (*Session, error) {
-	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, nil, nil)
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, nil, nil, CreateOptions{})
+}
+
+func (s *Store) CreateSessionWithOptions(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, options CreateOptions) (*Session, error) {
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, nil, nil, options)
 }
 
 func (s *Store) CreateSMBSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, smb *SMBConfig) (*Session, error) {
-	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, smb, nil, nil)
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, smb, nil, nil, CreateOptions{})
 }
 
 func (s *Store) CreateFTPSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, ftp *FTPConfig) (*Session, error) {
-	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, ftp, nil)
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, ftp, nil, CreateOptions{})
 }
 
 func (s *Store) CreateS3Session(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, s3 *S3Config) (*Session, error) {
-	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, nil, s3)
+	return s.createSession(root, ttlSeconds, readonly, allowUpload, allowEdit, allowDelete, nil, nil, s3, CreateOptions{})
 }
 
-func (s *Store) createSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, smb *SMBConfig, ftp *FTPConfig, s3 *S3Config) (*Session, error) {
+func (s *Store) createSession(root string, ttlSeconds int, readonly bool, allowUpload bool, allowEdit bool, allowDelete bool, smb *SMBConfig, ftp *FTPConfig, s3 *S3Config, options CreateOptions) (*Session, error) {
 	// Rate limiting: max 10 session creations per minute
 	s.createMu.Lock()
 	now := time.Now()
@@ -116,16 +125,17 @@ func (s *Store) createSession(root string, ttlSeconds int, readonly bool, allowU
 	}
 
 	session := &Session{
-		Code:        token,
-		Root:        root,
-		ExpiresAt:   time.Now().Add(time.Duration(ttlSeconds) * time.Second),
-		ReadOnly:    readonly,
-		AllowUpload: allowUpload,
-		AllowEdit:   allowEdit,
-		AllowDelete: allowDelete,
-		SMB:         smb,
-		FTP:         ftp,
-		S3:          s3,
+		Code:               token,
+		Root:               root,
+		ExpiresAt:          time.Now().Add(time.Duration(ttlSeconds) * time.Second),
+		ReadOnly:           readonly,
+		AllowUpload:        allowUpload,
+		AllowEdit:          allowEdit,
+		AllowDelete:        allowDelete,
+		RequireMountedRoot: options.RequireMountedRoot,
+		SMB:                smb,
+		FTP:                ftp,
+		S3:                 s3,
 	}
 
 	s.mu.Lock()

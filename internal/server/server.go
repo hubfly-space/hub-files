@@ -457,6 +457,18 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
+		if session.RequireMountedRoot {
+			if session.SMB != nil || session.FTP != nil || session.S3 != nil {
+				http.Error(w, "Mounted-root sessions require a local filesystem root", http.StatusBadRequest)
+				return
+			}
+			mounted, err := hostmount.IsMounted(session.Root)
+			if err != nil || !mounted {
+				http.Error(w, "Session root is no longer mounted", http.StatusConflict)
+				return
+			}
+		}
+
 		// Inject session info into request headers
 		r.Header.Set("X-Session-Root", session.Root)
 		if session.ReadOnly {
@@ -581,8 +593,13 @@ func (s *Server) handleSessionInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	displayRoot := session.Root
+	if session.RequireMountedRoot {
+		displayRoot = ""
+	}
+
 	response := struct {
-		Root          string `json:"root"`
+		Root          string `json:"root,omitempty"`
 		Type          string `json:"type"`
 		CanHostMount  bool   `json:"canHostMount"`
 		HostMountRoot string `json:"hostMountRoot,omitempty"`
@@ -591,7 +608,9 @@ func (s *Server) handleSessionInfo(w http.ResponseWriter, r *http.Request) {
 		AllowEdit     bool   `json:"allowEdit"`
 		AllowDelete   bool   `json:"allowDelete"`
 	}{
-		Root:         session.Root,
+		// Mounted-root sessions point at a Hubcell host path. Keep that detail
+		// inside the Files service; it must never be exposed to the browser.
+		Root:         displayRoot,
 		Type:         "local",
 		CanHostMount: false,
 		ReadOnly:     session.ReadOnly,
@@ -1215,18 +1234,19 @@ func (s *Server) handleExtract(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Root           string `json:"root"`
-		TTLSeconds     int    `json:"ttlSeconds"`
-		ReadOnly       bool   `json:"readonly"`
-		AllowUpload    bool   `json:"allowUpload"`
-		AllowEdit      bool   `json:"allowEdit"`
-		AllowDelete    bool   `json:"allowDelete"`
-		SMBUsername    string `json:"smbUsername"`
-		SMBPassword    string `json:"smbPassword"`
-		SMBDomain      string `json:"smbDomain"`
-		SMBWorkstation string `json:"smbWorkstation"`
-		FTPUsername    string `json:"ftpUsername"`
-		FTPPassword    string `json:"ftpPassword"`
+		Root               string `json:"root"`
+		TTLSeconds         int    `json:"ttlSeconds"`
+		ReadOnly           bool   `json:"readonly"`
+		AllowUpload        bool   `json:"allowUpload"`
+		AllowEdit          bool   `json:"allowEdit"`
+		AllowDelete        bool   `json:"allowDelete"`
+		RequireMountedRoot bool   `json:"requireMountedRoot"`
+		SMBUsername        string `json:"smbUsername"`
+		SMBPassword        string `json:"smbPassword"`
+		SMBDomain          string `json:"smbDomain"`
+		SMBWorkstation     string `json:"smbWorkstation"`
+		FTPUsername        string `json:"ftpUsername"`
+		FTPPassword        string `json:"ftpPassword"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -1271,13 +1291,25 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.RequireMountedRoot {
+		if smbCfg != nil || ftpCfg != nil {
+			http.Error(w, "requireMountedRoot is only valid for local roots", http.StatusBadRequest)
+			return
+		}
+		mounted, mountErr := hostmount.IsMounted(root)
+		if mountErr != nil || !mounted {
+			http.Error(w, "root must be a mounted local filesystem", http.StatusConflict)
+			return
+		}
+	}
+
 	var session *sessions.Session
 	if smbCfg != nil {
 		session, err = s.Sessions.CreateSMBSession(root, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete, smbCfg)
 	} else if ftpCfg != nil {
 		session, err = s.Sessions.CreateFTPSession(root, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete, ftpCfg)
 	} else {
-		session, err = s.Sessions.CreateSession(root, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete)
+		session, err = s.Sessions.CreateSessionWithOptions(root, req.TTLSeconds, req.ReadOnly, req.AllowUpload, req.AllowEdit, req.AllowDelete, sessions.CreateOptions{RequireMountedRoot: req.RequireMountedRoot})
 	}
 	if err != nil {
 		log.Printf("CreateSession error: %v", err)
