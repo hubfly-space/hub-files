@@ -19,13 +19,25 @@ import { cn } from "@/lib/utils";
 
 import { api } from "./api";
 import { SearchModal } from "./components/SearchModal";
-import { joinPath, dirname } from "./utils/path";
+import { joinPath } from "./utils/path";
+import { uploadTree, type TreeItem } from "./utils/uploadTree";
 import { NewFileDialog } from "./components/dialogs/NewFileDialog";
+
+async function readAllEntries(
+  reader: FileSystemDirectoryReader,
+): Promise<FileSystemEntry[]> {
+  const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+    reader.readEntries(resolve, reject);
+  });
+  if (batch.length === 0) return [];
+  return batch.concat(await readAllEntries(reader));
+}
 
 async function getFilesFromDrag(
   dataTransfer: DataTransfer,
-): Promise<{ file: File; relativePath: string }[]> {
-  const results: { file: File; relativePath: string }[] = [];
+): Promise<{ files: TreeItem[]; dirs: string[] }> {
+  const files: TreeItem[] = [];
+  const dirs: string[] = [];
 
   const entries = Array.from(dataTransfer.items)
     .map((item) => item.webkitGetAsEntry())
@@ -41,14 +53,11 @@ async function getFilesFromDrag(
       const file = await new Promise<File>((resolve, reject) => {
         (entry as FileSystemFileEntry).file(resolve, reject);
       });
-      results.push({ file, relativePath: currentPath });
+      files.push({ file, relativePath: currentPath });
     } else if (entry.isDirectory) {
+      dirs.push(currentPath);
       const reader = (entry as FileSystemDirectoryEntry).createReader();
-      const children = await new Promise<FileSystemEntry[]>(
-        (resolve, reject) => {
-          reader.readEntries(resolve, reject);
-        },
-      );
+      const children = await readAllEntries(reader);
       for (const child of children) {
         await walkEntry(child, currentPath);
       }
@@ -59,7 +68,7 @@ async function getFilesFromDrag(
     await walkEntry(entry, "");
   }
 
-  return results;
+  return { files, dirs };
 }
 
 function App() {
@@ -145,9 +154,12 @@ function App() {
 
   const {
     fileInputRef,
+    folderInputRef,
     activeUploads,
     handleUploadClick,
+    handleUploadFolderClick,
     handleFileChange,
+    handleFolderChange,
     uploadFiles,
     clearUpload,
     clearAllUploads,
@@ -166,50 +178,16 @@ function App() {
     );
 
     if (hasFolders) {
-      const entries = await getFilesFromDrag(event.dataTransfer);
-      if (entries.length === 0) return;
+      const { files, dirs } = await getFilesFromDrag(event.dataTransfer);
+      if (files.length === 0 && dirs.length === 0) return;
 
-      // Create necessary directories and upload files
-      const dirsToCreate = new Set<string>();
-
-      for (const { relativePath } of entries) {
-        const dir = dirname(relativePath);
-        if (dir && dir !== ".") {
-          dirsToCreate.add(joinPath(path, dir));
-        }
-      }
-
-      // Create directories from root-most to leaf-most
-      const sortedDirs = Array.from(dirsToCreate).sort();
-      for (const dirPath of sortedDirs) {
-        try {
-          await api.mkdir(dirPath);
-        } catch {
-          // Directory may already exist
-        }
-      }
-
-      // Upload files preserving relative path
-      const filesWithNames = entries.map(({ file, relativePath }) => {
-        const dir = dirname(relativePath);
-        const baseName = relativePath.split("/").pop() || file.name;
-        // Create a new File with adjusted name for the upload path
-        const targetDir = dir && dir !== "." ? joinPath(path, dir) : path;
-        return { file, targetDir, baseName };
-      });
-
-      // Group by targetDir and upload each group
-      const groups = new Map<string, File[]>();
-      for (const { file, targetDir, baseName } of filesWithNames) {
-        const renamedFile = new File([file], baseName, { type: file.type });
-        const group = groups.get(targetDir) || [];
-        group.push(renamedFile);
-        groups.set(targetDir, group);
-      }
-
-      for (const [, groupFiles] of groups) {
-        await uploadFiles(groupFiles);
-      }
+      await uploadTree(
+        files,
+        path,
+        (dirPath) => api.mkdir(dirPath),
+        (groupFiles, targetPath) => uploadFiles(groupFiles, targetPath),
+        dirs,
+      );
     } else {
       const droppedFiles = Array.from(event.dataTransfer.files);
       if (droppedFiles.length > 0) {
@@ -378,6 +356,7 @@ function App() {
             }
             onRefresh={refresh}
             onUpload={handleUploadClick}
+            onUploadFolder={handleUploadFolderClick}
             onNewFolder={() => setNewFolderDialog({ open: true, name: "" })}
             onNewFile={() => setNewFileDialog({ open: true, name: "" })}
             onOpenSearch={() => setSearchOpen(true)}
@@ -394,6 +373,8 @@ function App() {
             onClearSelection={clearSelection}
             fileInputRef={fileInputRef}
             onFileChange={handleFileChange}
+            folderInputRef={folderInputRef}
+            onFolderChange={handleFolderChange}
             canHostMount={Boolean(session?.canHostMount)}
             hostMounting={hostMounting}
             onHostMount={handleHostMount}

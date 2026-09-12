@@ -62,20 +62,25 @@ func SafePath(root, subPath string) (string, error) {
 	// Resolve symlinks to prevent symlink traversal attacks
 	resolved, err := filepath.EvalSymlinks(absFinal)
 	if err != nil {
-		// If file doesn't exist yet (for write operations), check parent
-		parent := filepath.Dir(absFinal)
-		resolvedParent, err2 := filepath.EvalSymlinks(parent)
-		if err2 != nil {
-			return "", ErrUnauthorized
+		// The target (or a parent component) doesn't exist yet. Walk up to the
+		// nearest existing ancestor and verify it resolves inside the root.
+		// This lets recursive operations (e.g. Mkdir) create a missing chain of
+		// directories instead of failing with ErrUnauthorized.
+		ancestor := filepath.Dir(absFinal)
+		for {
+			resolvedAncestor, err2 := filepath.EvalSymlinks(ancestor)
+			if err2 == nil {
+				if !pathWithinRoot(absRoot, resolvedAncestor) {
+					return "", ErrUnauthorized
+				}
+				return absFinal, nil
+			}
+			if ancestor == absRoot || ancestor == filepath.Dir(ancestor) {
+				break
+			}
+			ancestor = filepath.Dir(ancestor)
 		}
-		// if !pathWithinRoot(absRoot, filepath.Clean(resolvedParent)) {
-		// 	return "", ErrUnauthorized
-		// } filepath.Clean is redudant as EvalSymlinks performs clean
-
-		if !pathWithinRoot(absRoot, resolvedParent) {
-			return "", ErrUnauthorized
-		}
-		return absFinal, nil
+		return "", ErrUnauthorized
 	}
 
 	// if !pathWithinRoot(absRoot, filepath.Clean(resolved)) {
