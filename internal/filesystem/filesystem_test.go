@@ -29,6 +29,13 @@ func TestSafePath(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Create a sibling outside tmpDir that traversal attempts should target
+	outsideFile := filepath.Join(filepath.Dir(tmpDir), "filepath-outside.txt")
+	if err := os.WriteFile(outsideFile, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(outsideFile)
+
 	tests := []struct {
 		name     string
 		root     string
@@ -46,7 +53,7 @@ func TestSafePath(t *testing.T) {
 		{
 			name:    "path traversal attack",
 			root:    tmpDir,
-			subPath: "..../.../etc/passwd",
+			subPath: "../" + filepath.Base(outsideFile),
 			wantErr: true,
 		},
 		{
@@ -62,9 +69,9 @@ func TestSafePath(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "absolute path traversal",
+			name:    "path traversal out of root",
 			root:    tmpDir,
-			subPath: "/etc/passwd",
+			subPath: "../../../etc/passwd",
 			wantErr: true,
 		},
 	}
@@ -358,6 +365,75 @@ func TestMkdir(t *testing.T) {
 	newDir := filepath.Join(tmpDir, "newdir")
 	if _, err := os.Stat(newDir); err != nil {
 		t.Error("Created directory should exist")
+	}
+}
+
+func TestMkdirNested(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "test-mkdir-nested-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// A deep chain where no intermediate path exists yet.
+	err = Mkdir(tmpDir, "a/b/c")
+	if err != nil {
+		t.Fatalf("Mkdir() nested error = %v", err)
+	}
+
+	for _, rel := range []string{"a", filepath.Join("a", "b"), filepath.Join("a", "b", "c")} {
+		info, err := os.Stat(filepath.Join(tmpDir, rel))
+		if err != nil {
+			t.Fatalf("expected %s to exist: %v", rel, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("%s exists but is not a directory", rel)
+		}
+	}
+}
+
+func TestMkdirRejectsSymlinkEscape(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "test-mkdir-symlink-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	link := filepath.Join(tmpDir, "link")
+	if err := os.Symlink("/etc", link); err != nil {
+		t.Fatal(err)
+	}
+
+	err = Mkdir(tmpDir, filepath.Join("link", "escaped"))
+	if err == nil {
+		t.Fatal("Mkdir() expected symlink escape to be rejected")
+	}
+	if !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("Mkdir() error = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestMkdirAllowsSymlinkInsideRoot(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "test-mkdir-symlink-in-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	realDir := filepath.Join(tmpDir, "real")
+	if err := os.MkdirAll(realDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmpDir, "goodlink")
+	if err := os.Symlink(realDir, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Mkdir(tmpDir, filepath.Join("goodlink", "deep")); err != nil {
+		t.Fatalf("Mkdir() through in-root symlink error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(realDir, "deep")); err != nil {
+		t.Fatalf("expected deep dir to be created via symlink: %v", err)
 	}
 }
 
