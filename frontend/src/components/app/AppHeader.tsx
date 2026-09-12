@@ -19,10 +19,12 @@ type AppHeaderProps = {
   selectionMode: boolean;
   selectedCount: number;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
+  folderInputRef?: React.RefObject<HTMLInputElement | null>;
   onNavigate: (path: string) => void;
   onViewToggle: () => void;
   onRefresh: () => void;
   onUpload: () => void;
+  onUploadFolder?: () => void;
   onNewFolder: () => void;
   onNewFile: () => void;
   onOpenSearch: () => void;
@@ -31,6 +33,7 @@ type AppHeaderProps = {
   onBulkZip: () => void;
   onClearSelection: () => void;
   onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onFolderChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
   canHostMount?: boolean;
   hostMounting?: boolean;
   onHostMount?: () => void;
@@ -44,10 +47,12 @@ export function AppHeader({
   selectionMode,
   selectedCount,
   fileInputRef,
+  folderInputRef,
   onNavigate,
   onViewToggle,
   onRefresh,
   onUpload,
+  onUploadFolder,
   onNewFolder,
   onNewFile,
   onOpenSearch,
@@ -56,6 +61,7 @@ export function AppHeader({
   onBulkZip,
   onClearSelection,
   onFileChange,
+  onFolderChange,
   canHostMount,
   hostMounting,
   onHostMount,
@@ -93,6 +99,7 @@ export function AppHeader({
           onViewToggle={onViewToggle}
           onRefresh={onRefresh}
           onUpload={onUpload}
+          onUploadFolder={onUploadFolder}
           onNewFile={onNewFile}
           onNewFolder={onNewFolder}
           onOpenSearch={onOpenSearch}
@@ -114,6 +121,13 @@ export function AppHeader({
         ref={fileInputRef}
         style={{ display: "none" }}
         onChange={onFileChange}
+      />
+      <input
+        type="file"
+        ref={folderInputRef}
+        style={{ display: "none" }}
+        onChange={onFolderChange}
+        {...({ webkitdirectory: "true" } as React.InputHTMLAttributes<HTMLInputElement>)}
       />
     </header>
   );

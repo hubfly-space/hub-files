@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 
 import { api } from "../api";
 import type { UploadStatus } from "../components/UploadProgress";
+import { uploadTree, type TreeItem } from "../utils/uploadTree";
 
 const makeUploadId = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -37,10 +38,12 @@ interface UploadTask {
   file: File;
   uploadId: string;
   uploadedBytes: number;
+  targetPath: string;
 }
 
 export function useUploads(currentPath: string, onUploaded: () => void) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const [activeUploads, setActiveUploads] = useState<UploadStatus[]>([]);
   const controllersRef = useRef<Map<string, AbortController>>(new Map());
   const tasksRef = useRef<Map<string, UploadTask>>(new Map());
@@ -106,7 +109,7 @@ export function useUploads(currentPath: string, onUploaded: () => void) {
 
       api
         .upload(
-          currentPath,
+          task.targetPath,
           task.file,
           (loaded, total) => {
             const now = Date.now();
@@ -168,7 +171,7 @@ export function useUploads(currentPath: string, onUploaded: () => void) {
           }
         });
     },
-    [currentPath, onUploaded, removeController, updateUpload],
+    [onUploaded, removeController, updateUpload],
   );
 
   const retryUpload = useCallback(
@@ -195,7 +198,7 @@ export function useUploads(currentPath: string, onUploaded: () => void) {
 
       api
         .upload(
-          currentPath,
+          oldTask.targetPath,
           oldTask.file,
           (loaded, total) => {
             const now = Date.now();
@@ -257,18 +260,21 @@ export function useUploads(currentPath: string, onUploaded: () => void) {
           }
         });
     },
-    [currentPath, onUploaded, removeController, updateUpload],
+    [onUploaded, removeController, updateUpload],
   );
 
   const uploadFiles = useCallback(
-    async (files: File[]) => {
+    async (files: File[], targetPath?: string) => {
       if (files.length === 0) return;
+
+      const destPath = targetPath || currentPath;
 
       const uploads = files.map((file) => ({
         id: makeUploadId(),
         file,
         uploadId: makeUploadId(),
         uploadedBytes: 0,
+        targetPath: destPath,
       }));
 
       for (const u of uploads) {
@@ -296,7 +302,7 @@ export function useUploads(currentPath: string, onUploaded: () => void) {
 
         try {
           await api.upload(
-            currentPath,
+            task.targetPath,
             task.file,
             (loaded, total) => {
               const now = Date.now();
@@ -415,8 +421,43 @@ export function useUploads(currentPath: string, onUploaded: () => void) {
     [uploadFiles],
   );
 
+  const handleFolderChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files || []);
+      event.target.value = "";
+      if (files.length === 0) return;
+
+      const items: TreeItem[] = [];
+      for (const file of files) {
+        const relativePath = (
+          file as File & { webkitRelativePath?: string }
+        ).webkitRelativePath;
+        if (relativePath) {
+          items.push({ file, relativePath });
+        }
+      }
+
+      if (items.length === 0) {
+        uploadFiles(files);
+        return;
+      }
+
+      await uploadTree(
+        items,
+        currentPath,
+        (dirPath) => api.mkdir(dirPath),
+        (groupFiles, targetPath) => uploadFiles(groupFiles, targetPath),
+      );
+    },
+    [currentPath, uploadFiles],
+  );
+
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
+  }, []);
+
+  const handleUploadFolderClick = useCallback(() => {
+    folderInputRef.current?.click();
   }, []);
 
   const clearUpload = useCallback((id: string) => {
@@ -436,9 +477,12 @@ export function useUploads(currentPath: string, onUploaded: () => void) {
 
   return {
     fileInputRef,
+    folderInputRef,
     activeUploads,
     handleUploadClick,
+    handleUploadFolderClick,
     handleFileChange,
+    handleFolderChange,
     uploadFiles,
     clearUpload,
     clearAllUploads,

@@ -1,5 +1,6 @@
 import {
   Upload,
+  FolderInput,
   RefreshCw,
   LayoutGrid,
   List,
@@ -21,6 +22,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +35,7 @@ interface ToolbarProps {
   onViewToggle: () => void;
   onRefresh: () => void;
   onUpload: () => void;
+  onUploadFolder?: () => void;
   onNewFolder: () => void;
   onNewFile: () => void;
   onOpenSearch: () => void;
@@ -50,6 +57,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onViewToggle,
   onRefresh,
   onUpload,
+  onUploadFolder,
   onNewFolder,
   onNewFile,
   onOpenSearch,
@@ -210,19 +218,44 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   </TooltipContent>
                 </Tooltip>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      onClick={onUpload}
-                      className="h-10 w-10 rounded-xl bg-secondary/50 hover:bg-primary hover:text-primary-foreground transition-all"
-                    >
-                      <Upload className="w-4.5 h-4.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Upload Files</TooltipContent>
-                </Tooltip>
+                <Popover>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="h-10 w-10 rounded-xl bg-secondary/50 hover:bg-primary hover:text-primary-foreground transition-all"
+                        >
+                          <Upload className="w-4.5 h-4.5" />
+                        </Button>
+                      </PopoverTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>Upload</TooltipContent>
+                  </Tooltip>
+                  <PopoverContent align="end" className="w-48 p-1.5">
+                    <div className="flex flex-col gap-1">
+                      <button
+                        type="button"
+                        onClick={onUpload}
+                        className="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                      >
+                        <Upload className="w-4 h-4 shrink-0" />
+                        Upload Files
+                      </button>
+                      {onUploadFolder && (
+                        <button
+                          type="button"
+                          onClick={onUploadFolder}
+                          className="flex items-center gap-2.5 w-full rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                        >
+                          <FolderInput className="w-4 h-4 shrink-0" />
+                          Upload Folder
+                        </button>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
 
                 <Tooltip>
                   <TooltipTrigger asChild>
