@@ -46,16 +46,23 @@ func SafePath(root, subPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// absRoot = filepath.Clean(absRoot) // i just think its redudant as the filepath.Abs already returning clean result. i dont know just tryna be smart with the coding gods
 
-	finalPath := filepath.Join(absRoot, filepath.FromSlash(subPath))
+	// Anchor on the resolved (symlink-free) form of the root. Roots that live
+	// beneath symlinks (e.g. container mounts) otherwise fail the containment
+	// check because EvalSymlinks returns a textually different path.
+	absRootResolved := absRoot
+	if resolvedRoot, err := filepath.EvalSymlinks(absRoot); err == nil {
+		absRootResolved = resolvedRoot
+	}
+
+	finalPath := filepath.Join(absRootResolved, filepath.FromSlash(subPath))
 	absFinal, err := filepath.Abs(finalPath)
 	if err != nil {
 		return "", err
 	}
 	// absFinal = filepath.Clean(absFinal) //same thing as clean above still redudant
 
-	if !pathWithinRoot(absRoot, absFinal) {
+	if !pathWithinRoot(absRootResolved, absFinal) {
 		return "", ErrUnauthorized
 	}
 
@@ -70,12 +77,12 @@ func SafePath(root, subPath string) (string, error) {
 		for {
 			resolvedAncestor, err2 := filepath.EvalSymlinks(ancestor)
 			if err2 == nil {
-				if !pathWithinRoot(absRoot, resolvedAncestor) {
+				if !pathWithinRoot(absRootResolved, resolvedAncestor) {
 					return "", ErrUnauthorized
 				}
 				return absFinal, nil
 			}
-			if ancestor == absRoot || ancestor == filepath.Dir(ancestor) {
+			if ancestor == absRootResolved || ancestor == filepath.Dir(ancestor) {
 				break
 			}
 			ancestor = filepath.Dir(ancestor)
@@ -87,7 +94,7 @@ func SafePath(root, subPath string) (string, error) {
 	// 	return "", ErrUnauthorized
 	// } filepath.Clean is redudant as EvalSymlinks performs clean
 
-	if !pathWithinRoot(absRoot, resolved) {
+	if !pathWithinRoot(absRootResolved, resolved) {
 		return "", ErrUnauthorized
 	}
 
