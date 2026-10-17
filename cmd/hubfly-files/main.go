@@ -48,7 +48,6 @@ func startServer(name, addr string, handler http.Handler) {
 
 func main() {
 	showVersion := flag.Bool("version", false, "Print version information and exit")
-	flag.Parse()
 
 	cfg := config.LoadConfig()
 
@@ -90,7 +89,7 @@ func main() {
 
 	startServer(
 		"Health Server",
-		":"+cfg.HealthPort,
+		cfg.HealthAddr,
 		healthMux,
 	)
 
