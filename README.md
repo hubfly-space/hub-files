@@ -68,3 +68,11 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening issues or pull requests.
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+## Private status monitoring
+
+Set `HUBFILES_HEALTH_ADDR=<host-NetBird-IP>:60003` for the dedicated
+`/healthz` listener used by `hubfly-status`. This listener exposes minimal health
+only; management routes and their existing transport are unchanged. Restrict
+access to the monitoring peer in NetBird and the host firewall. The legacy
+health-port setting remains supported; apply the private bind at status cutover.
